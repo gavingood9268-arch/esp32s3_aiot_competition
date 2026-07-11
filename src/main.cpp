@@ -25,10 +25,7 @@ const unsigned long LED_HEARTBEAT_INTERVAL_MS = 1000;
 const int LIGHT_SAMPLE_COUNT = 8;
 const uint8_t DISPLAY_ROTATION = 2;
 const bool LED_ACTIVE_HIGH = true;
-const bool BUZZER_ACTIVE_HIGH = true;
-const int BUZZER_PWM_CHANNEL = 0;
-const int BUZZER_PWM_RESOLUTION = 8;
-const int BUZZER_PWM_DUTY = 96;
+const bool BUZZER_ACTIVE_HIGH = false;
 
 WebServer server(80);
 
@@ -54,7 +51,6 @@ unsigned long lastBuzzerPattern = 0;
 int buzzerAlarmMask = 0;
 bool alarmPulseOn = false;
 bool buzzerOutputOn = false;
-int buzzerOutputFreq = 0;
 String cloudStatus = "OFF";
 
 bool isTempAlarm();
@@ -66,22 +62,13 @@ void setLed(bool on) {
     digitalWrite(LED_PIN, (on == LED_ACTIVE_HIGH) ? HIGH : LOW);
 }
 
-void setBuzzerOutput(bool on, int freq = 0) {
-    if (on == buzzerOutputOn && (!on || freq == buzzerOutputFreq)) {
+void setBuzzerOutput(bool on) {
+    if (on == buzzerOutputOn) {
         return;
     }
-
-    if (!on) {
-        ledcWrite(BUZZER_PWM_CHANNEL, 0);
-        buzzerOutputOn = false;
-        buzzerOutputFreq = 0;
-        return;
-    }
-
-    ledcWriteTone(BUZZER_PWM_CHANNEL, freq);
-    ledcWrite(BUZZER_PWM_CHANNEL, BUZZER_PWM_DUTY);
+    noTone(BUZZER_PIN);
+    digitalWrite(BUZZER_PIN, (on == BUZZER_ACTIVE_HIGH) ? HIGH : LOW);
     buzzerOutputOn = on;
-    buzzerOutputFreq = freq;
 }
 
 int readLightRaw() {
@@ -214,20 +201,10 @@ int alarmCountForType(int type) {
     return 3;
 }
 
-int alarmFreqForType(int type) {
-    if (type == 1) {
-        return 1200;
-    }
-    if (type == 2) {
-        return 1700;
-    }
-    return 2300;
-}
-
-bool alarmOutputAt(int mask, unsigned long elapsed, int* freq) {
-    const unsigned long beepOnMs = 45;
-    const unsigned long beepCycleMs = 260;
-    const unsigned long segmentGapMs = 650;
+bool alarmOutputAt(int mask, unsigned long elapsed) {
+    const unsigned long beepOnMs = 80;
+    const unsigned long beepCycleMs = 280;
+    const unsigned long segmentGapMs = 850;
     unsigned long cursor = 0;
 
     for (int type = 1; type <= 3; type++) {
@@ -239,7 +216,6 @@ bool alarmOutputAt(int mask, unsigned long elapsed, int* freq) {
 
         if (elapsed >= cursor && elapsed < cursor + segmentMs) {
             unsigned long local = elapsed - cursor;
-            *freq = alarmFreqForType(type);
             return (local % beepCycleMs) < beepOnMs;
         }
 
@@ -267,9 +243,8 @@ void updateBuzzerStatus() {
     }
 
     unsigned long elapsed = now - buzzerPatternStart;
-    int freq = 0;
-    alarmPulseOn = alarmOutputAt(buzzerAlarmMask, elapsed, &freq);
-    setBuzzerOutput(alarmPulseOn, freq);
+    alarmPulseOn = alarmOutputAt(buzzerAlarmMask, elapsed);
+    setBuzzerOutput(alarmPulseOn);
 }
 
 void blinkLedAtStartup() {
@@ -530,8 +505,6 @@ void setup() {
     pinMode(BUTTON_PIN, INPUT_PULLUP);
     pinMode(BUZZER_PIN, OUTPUT);
     pinMode(LED_PIN, OUTPUT);
-    ledcSetup(BUZZER_PWM_CHANNEL, 1000, BUZZER_PWM_RESOLUTION);
-    ledcAttachPin(BUZZER_PIN, BUZZER_PWM_CHANNEL);
     setBuzzerOutput(false);
     setLed(false);
     blinkLedAtStartup();
