@@ -191,38 +191,44 @@ int currentAlarmMask() {
     return mask;
 }
 
-int alarmCountForType(int type) {
-    if (type == 1) {
-        return 1;
+bool patternOutputAt(unsigned long elapsed, const unsigned int* pattern, int length) {
+    unsigned long cursor = 0;
+    for (int i = 0; i < length; i++) {
+        cursor += pattern[i];
+        if (elapsed < cursor) {
+            return (i % 2) == 0;
+        }
     }
-    if (type == 2) {
-        return 2;
-    }
-    return 3;
+    return false;
 }
 
 bool alarmOutputAt(int mask, unsigned long elapsed) {
-    const unsigned long beepOnMs = 180;
-    const unsigned long beepCycleMs = 420;
-    const unsigned long segmentGapMs = 900;
-    unsigned long cursor = 0;
+    static const unsigned int tempOnly[] = {300};
+    static const unsigned int humiOnly[] = {190, 190, 190};
+    static const unsigned int lightOnly[] = {120, 140, 120, 140, 120};
+    static const unsigned int tempHumi[] = {320, 260, 140};
+    static const unsigned int tempLight[] = {320, 260, 120, 140, 120, 140, 120};
+    static const unsigned int humiLight[] = {170, 170, 170, 300, 320};
+    static const unsigned int allAlarm[] = {120, 130, 120, 130, 120, 280, 380};
 
-    for (int type = 1; type <= 3; type++) {
-        int bit = (type == 1) ? 1 : (type == 2 ? 2 : 4);
-        if (!(mask & bit)) continue;
-
-        int count = alarmCountForType(type);
-        unsigned long segmentMs = count * beepCycleMs;
-
-        if (elapsed >= cursor && elapsed < cursor + segmentMs) {
-            unsigned long local = elapsed - cursor;
-            return (local % beepCycleMs) < beepOnMs;
-        }
-
-        cursor += segmentMs + segmentGapMs;
+    switch (mask & 7) {
+        case 1:
+            return patternOutputAt(elapsed, tempOnly, sizeof(tempOnly) / sizeof(tempOnly[0]));
+        case 2:
+            return patternOutputAt(elapsed, humiOnly, sizeof(humiOnly) / sizeof(humiOnly[0]));
+        case 3:
+            return patternOutputAt(elapsed, tempHumi, sizeof(tempHumi) / sizeof(tempHumi[0]));
+        case 4:
+            return patternOutputAt(elapsed, lightOnly, sizeof(lightOnly) / sizeof(lightOnly[0]));
+        case 5:
+            return patternOutputAt(elapsed, tempLight, sizeof(tempLight) / sizeof(tempLight[0]));
+        case 6:
+            return patternOutputAt(elapsed, humiLight, sizeof(humiLight) / sizeof(humiLight[0]));
+        case 7:
+            return patternOutputAt(elapsed, allAlarm, sizeof(allAlarm) / sizeof(allAlarm[0]));
+        default:
+            return false;
     }
-
-    return false;
 }
 
 void updateBuzzerStatus() {
