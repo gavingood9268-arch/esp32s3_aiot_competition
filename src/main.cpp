@@ -25,10 +25,10 @@ const unsigned long LED_HEARTBEAT_INTERVAL_MS = 1000;
 const int LIGHT_SAMPLE_COUNT = 8;
 const uint8_t DISPLAY_ROTATION = 2;
 const bool LED_ACTIVE_HIGH = true;
-const bool BUZZER_ACTIVE_HIGH = false;
+const bool BUZZER_ACTIVE_HIGH = true;
 const uint8_t BUZZER_PWM_CHANNEL = 0;
 const uint8_t BUZZER_PWM_RESOLUTION = 8;
-const uint32_t BUZZER_PWM_DUTY = BUZZER_ACTIVE_HIGH ? 32 : 223;
+const uint32_t BUZZER_PWM_DUTY = 24;
 const unsigned int BUZZER_STARTUP_HZ = 2200;
 
 WebServer server(80);
@@ -76,8 +76,9 @@ void setBuzzerOutput(bool on, unsigned int frequencyHz = BUZZER_STARTUP_HZ) {
         ledcWrite(BUZZER_PWM_CHANNEL, BUZZER_PWM_DUTY);
         buzzerToneHz = frequencyHz;
     } else {
-        ledcWrite(BUZZER_PWM_CHANNEL, BUZZER_ACTIVE_HIGH ? 0 : 255);
-        digitalWrite(BUZZER_PIN, BUZZER_ACTIVE_HIGH ? LOW : HIGH);
+        ledcWriteTone(BUZZER_PWM_CHANNEL, 0);
+        ledcWrite(BUZZER_PWM_CHANNEL, 0);
+        digitalWrite(BUZZER_PIN, LOW);
         buzzerToneHz = 0;
     }
     buzzerOutputOn = on;
