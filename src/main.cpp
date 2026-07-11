@@ -202,9 +202,9 @@ int alarmCountForType(int type) {
 }
 
 bool alarmOutputAt(int mask, unsigned long elapsed) {
-    const unsigned long beepOnMs = 80;
-    const unsigned long beepCycleMs = 280;
-    const unsigned long segmentGapMs = 850;
+    const unsigned long beepOnMs = 180;
+    const unsigned long beepCycleMs = 420;
+    const unsigned long segmentGapMs = 900;
     unsigned long cursor = 0;
 
     for (int type = 1; type <= 3; type++) {
