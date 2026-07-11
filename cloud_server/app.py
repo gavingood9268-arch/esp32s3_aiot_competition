@@ -13,6 +13,8 @@ app = FastAPI(title="ESP32 AIoT Cloud")
 
 DEVICE_ID = os.getenv("DEVICE_ID", "esp32s3-env-001")
 ARK_API_KEY = os.getenv("ARK_API_KEY", "")
+ARK_BASE_URL = os.getenv("ARK_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3")
+ARK_MODEL = os.getenv("ARK_MODEL", "")
 ARK_ENDPOINT = os.getenv("ARK_ENDPOINT", "")
 
 state: dict[str, Any] = {
@@ -41,6 +43,7 @@ control: dict[str, Any] = {
 ai_result: dict[str, Any] = {
     "status": "NOT_RUN",
     "level": 0,
+    "risk": "未分析",
     "summary": "尚未触发 AI 分析。",
     "advice": "请先等待 ESP32 上传数据，然后点击“AI 风险分析”。",
     "updated_at": 0,
@@ -73,6 +76,78 @@ def compute_local_risk(payload: dict[str, Any]) -> tuple[str, str]:
     if not issues:
         return "NORMAL", "当前温度、湿度和光照均处于设定阈值范围内。"
     return "WARN", "；".join(issues)
+
+
+def build_ai_prompt() -> str:
+    return (
+        "你是一个用于竞赛展示的 AIoT 环境风险评估助手。"
+        "设备是 ESP32-S3 环境风险终端，传感器包括温度、湿度、光照。"
+        "请根据当前数据、阈值和本地报警状态做风险判断。"
+        "要求：用中文，简短，适合网页展示；不要输出 Markdown。"
+        "请严格按三行输出：\n"
+        "风险等级：正常/关注/预警/危险\n"
+        "风险说明：一句话说明原因\n"
+        "控制建议：一句话给出操作建议\n\n"
+        f"当前设备数据：{state}\n"
+        f"当前阈值与云端控制：{control}\n"
+    )
+
+
+def local_ai_fallback(status: str = "STUB", error: str = "") -> dict[str, Any]:
+    risk, detail = compute_local_risk(state)
+    manual = bool(control.get("manual_alarm"))
+    level = 1
+    risk_label = "正常"
+    advice = "维持当前阈值，继续观察环境变化。"
+
+    if manual:
+        level = 3
+        risk_label = "预警"
+        detail = "手动报警测试已开启，云端正在验证下行控制链路。"
+        advice = "比赛演示时可关闭手动报警，再制造真实环境异常进行对比。"
+    elif risk != "NORMAL":
+        level = 3
+        risk_label = "预警"
+        advice = "建议检查对应环境因素，并根据现场情况采取通风、遮光或降温处理。"
+
+    if error:
+        advice = f"{advice} 火山接口暂未返回，已使用本地规则兜底。错误：{error}"
+
+    return {
+        "status": status,
+        "level": level,
+        "risk": risk_label,
+        "summary": f"风险等级：{risk_label}。{detail}",
+        "advice": advice,
+        "updated_at": int(time.time()),
+    }
+
+
+def ark_chat_url() -> str:
+    if ARK_ENDPOINT:
+        return ARK_ENDPOINT
+    return f"{ARK_BASE_URL.rstrip('/')}/chat/completions"
+
+
+def parse_ai_text(content: str) -> dict[str, Any]:
+    text = " ".join(content.strip().split())
+    risk_label = "关注"
+    if "危险" in text:
+        risk_label = "危险"
+    elif "预警" in text:
+        risk_label = "预警"
+    elif "正常" in text:
+        risk_label = "正常"
+
+    level_map = {"正常": 1, "关注": 2, "预警": 3, "危险": 4}
+    return {
+        "status": "OK",
+        "level": level_map.get(risk_label, 2),
+        "risk": risk_label,
+        "summary": text[:160],
+        "advice": text[160:360] if len(text) > 160 else "建议见风险说明。",
+        "updated_at": int(time.time()),
+    }
 
 
 def html_page() -> str:
@@ -378,55 +453,31 @@ def run_ai() -> JSONResponse:
         )
         return JSONResponse(ai_result)
 
-    if not ARK_API_KEY or not ARK_ENDPOINT:
-        ai_result.update(
-            {
-                "status": "STUB",
-                "level": 1 if state["risk"] == "NORMAL" else 2,
-                "summary": "本地规则分析完成。",
-                "advice": "火山引擎大模型尚未配置。当前结果来自本地阈值规则，可用于先演示“云端分析”入口；后续接入火山 API 后会替换为大模型建议。",
-                "updated_at": int(time.time()),
-            }
-        )
+    if not ARK_API_KEY or not ARK_MODEL:
+        ai_result.update(local_ai_fallback())
         return JSONResponse(ai_result)
 
-    prompt = (
-        "你是一个 AIoT 环境风险评估助手。"
-        "请根据 ESP32 上传的温度、湿度、光照数据和阈值，给出中文风险等级、原因和控制建议。"
-        "回答要简短，适合展示在竞赛演示网页上。"
-        f"传感器数据：{state}。阈值与控制状态：{control}。"
-    )
     try:
         response = requests.post(
-            ARK_ENDPOINT,
+            ark_chat_url(),
             headers={"Authorization": f"Bearer {ARK_API_KEY}", "Content-Type": "application/json"},
             json={
+                "model": ARK_MODEL,
                 "messages": [
                     {"role": "system", "content": "你负责评估 ESP32 AIoT 环境监测终端的风险，并给出中文控制建议。"},
-                    {"role": "user", "content": prompt},
-                ]
+                    {"role": "user", "content": build_ai_prompt()},
+                ],
+                "temperature": 0.2,
+                "max_tokens": 180,
             },
             timeout=20,
         )
         response.raise_for_status()
-        content = response.text[:500]
-        ai_result.update(
-            {
-                "status": "OK",
-                "level": 1 if state["risk"] == "NORMAL" else 2,
-                "summary": "AI 分析完成。",
-                "advice": content,
-                "updated_at": int(time.time()),
-            }
-        )
+        data = response.json()
+        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        if not content:
+            raise ValueError("火山返回中没有 choices[0].message.content")
+        ai_result.update(parse_ai_text(content))
     except Exception as exc:
-        ai_result.update(
-            {
-                "status": "ERROR",
-                "level": 0,
-                "summary": "AI 请求失败。",
-                "advice": f"请检查火山引擎 API Key、Endpoint 和 Render 环境变量。错误信息：{exc}",
-                "updated_at": int(time.time()),
-            }
-        )
+        ai_result.update(local_ai_fallback("ERROR", str(exc)))
     return JSONResponse(ai_result)

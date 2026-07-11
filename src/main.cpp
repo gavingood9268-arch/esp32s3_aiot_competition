@@ -57,6 +57,9 @@ bool alarmPulseOn = false;
 bool buzzerOutputOn = true;
 unsigned int buzzerToneHz = 0;
 String cloudStatus = "OFF";
+String aiStatus = "WAIT";
+String aiRisk = "--";
+String aiSummary = "NO AI";
 
 bool isTempAlarm();
 bool isHumiAlarm();
@@ -156,6 +159,31 @@ bool extractJsonBool(const String& body, const String& key, bool fallback) {
     return fallback;
 }
 
+String extractJsonString(const String& body, const String& key, const String& fallback) {
+    int idx = body.indexOf("\"" + key + "\":");
+    if (idx < 0) return fallback;
+    idx = body.indexOf("\"", idx + key.length() + 3);
+    if (idx < 0) return fallback;
+    idx++;
+    String value = "";
+    bool escaping = false;
+    while (idx < body.length()) {
+        char c = body[idx++];
+        if (escaping) {
+            value += c;
+            escaping = false;
+            continue;
+        }
+        if (c == '\\') {
+            escaping = true;
+            continue;
+        }
+        if (c == '"') break;
+        value += c;
+    }
+    return value.length() ? value : fallback;
+}
+
 void syncCloud() {
     if (!wifiConnected || !cloudEnabled()) {
         cloudStatus = cloudEnabled() ? "NO WIFI" : "OFF";
@@ -185,6 +213,9 @@ void syncCloud() {
         humiThreshold = extractJsonFloat(body, "humi_threshold", humiThreshold);
         lightThreshold = (int)extractJsonFloat(body, "light_threshold", lightThreshold);
         cloudManualAlarm = extractJsonBool(body, "manual_alarm", false);
+        aiStatus = extractJsonString(body, "status", aiStatus);
+        aiRisk = extractJsonString(body, "risk", aiRisk);
+        aiSummary = extractJsonString(body, "summary", aiSummary);
         checkAlarm();
     } else {
         cloudStatus = "ERR";
@@ -345,6 +376,15 @@ uint16_t riskColor() {
     return ST77XX_GREEN;
 }
 
+String aiShortStatus() {
+    if (aiStatus == "OK") return "OK";
+    if (aiStatus == "ERROR") return "ERR";
+    if (aiStatus == "STUB") return "RULE";
+    if (aiStatus == "NO_DATA") return "NO";
+    if (aiStatus == "NOT_RUN") return "WAIT";
+    return aiStatus.length() > 4 ? aiStatus.substring(0, 4) : aiStatus;
+}
+
 void drawThermometerIcon(int x, int y, uint16_t color) {
     tft.drawRoundRect(x + 12, y, 12, 42, 6, color);
     tft.fillCircle(x + 18, y + 42, 13, color);
@@ -474,6 +514,8 @@ void drawOverviewPage() {
     tft.print(isAlarming ? "ALARM " : "NORMAL ");
     tft.print("CLOUD:");
     tft.print(cloudStatus);
+    tft.print(" AI:");
+    tft.print(aiShortStatus());
 }
 
 void updateDataPageValues() {
@@ -486,6 +528,8 @@ void updateDataPageValues() {
     tft.print(isAlarming ? "ALARM " : "NORMAL ");
     tft.print("CLOUD:");
     tft.print(cloudStatus);
+    tft.print(" AI:");
+    tft.print(aiShortStatus());
 }
 
 void drawPage() {

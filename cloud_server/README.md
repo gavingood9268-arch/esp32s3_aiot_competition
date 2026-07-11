@@ -5,7 +5,7 @@ Render 云端中转服务，用于：
 - ESP32 上传温湿度、光照和本地报警状态
 - 任意手机打开公网网页查看数据
 - 手机修改阈值和控制命令
-- 后续接入火山引擎大模型
+- 点击网页按钮即时调用火山方舟大模型做中文风险分析
 
 ## 本地运行
 
@@ -51,3 +51,14 @@ https://esp32-aiot-cloud.onrender.com
 
 这个地址后续要写回 ESP32 代码，二维码也会显示它。
 
+## 火山方舟环境变量
+
+在 Render 的 `Environment` 页面添加：
+
+```text
+ARK_API_KEY=你的火山方舟 API Key
+ARK_MODEL=你的模型或推理接入点名称
+ARK_BASE_URL=https://ark.cn-beijing.volces.com/api/v3
+```
+
+`ARK_BASE_URL` 不填也会使用上面的默认值。如果你拿到的是完整 `chat/completions` 地址，也可以额外设置 `ARK_ENDPOINT` 覆盖默认地址。未配置 `ARK_API_KEY` 或 `ARK_MODEL` 时，网页的“AI 风险分析”按钮会使用本地阈值规则兜底，方便先演示云端分析入口。
