@@ -49,6 +49,8 @@ unsigned long buzzerPatternStart = 0;
 unsigned long lastBuzzerPattern = 0;
 int buzzerAlarmMask = 0;
 bool alarmPulseOn = false;
+bool buzzerToneOn = false;
+int buzzerToneFreq = 0;
 String cloudStatus = "OFF";
 
 bool isTempAlarm();
@@ -58,6 +60,23 @@ int currentAlarmMask();
 
 void setLed(bool on) {
     digitalWrite(LED_PIN, (on == LED_ACTIVE_HIGH) ? HIGH : LOW);
+}
+
+void setBuzzerTone(bool on, int freq = 0) {
+    if (!on) {
+        if (buzzerToneOn) {
+            noTone(BUZZER_PIN);
+            buzzerToneOn = false;
+            buzzerToneFreq = 0;
+        }
+        return;
+    }
+
+    if (!buzzerToneOn || buzzerToneFreq != freq) {
+        tone(BUZZER_PIN, freq);
+        buzzerToneOn = true;
+        buzzerToneFreq = freq;
+    }
 }
 
 int readLightRaw() {
@@ -182,21 +201,21 @@ int currentAlarmMask() {
 
 void alarmToneForType(int type, int* freq, int* count) {
     if (type == 1) {
-        *freq = 2400;
+        *freq = 1200;
         *count = 1;
     } else if (type == 2) {
-        *freq = 1800;
+        *freq = 1700;
         *count = 2;
     } else {
-        *freq = 3000;
+        *freq = 2200;
         *count = 3;
     }
 }
 
 bool alarmOutputAt(int mask, unsigned long elapsed, int* freq) {
-    const unsigned long beepOnMs = 90;
-    const unsigned long beepCycleMs = 230;
-    const unsigned long segmentGapMs = 430;
+    const unsigned long beepOnMs = 70;
+    const unsigned long beepCycleMs = 260;
+    const unsigned long segmentGapMs = 520;
     unsigned long cursor = 0;
 
     for (int type = 1; type <= 3; type++) {
@@ -224,7 +243,7 @@ void updateBuzzerStatus() {
     alarmPulseOn = false;
 
     if (mask == 0) {
-        noTone(BUZZER_PIN);
+        setBuzzerTone(false);
         buzzerAlarmMask = 0;
         return;
     }
@@ -238,8 +257,7 @@ void updateBuzzerStatus() {
     unsigned long elapsed = now - buzzerPatternStart;
     int freq = 0;
     alarmPulseOn = alarmOutputAt(buzzerAlarmMask, elapsed, &freq);
-    if (alarmPulseOn) tone(BUZZER_PIN, freq);
-    else noTone(BUZZER_PIN);
+    setBuzzerTone(alarmPulseOn, freq);
 }
 
 void blinkLedAtStartup() {
