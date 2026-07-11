@@ -503,7 +503,7 @@ def run_ai() -> JSONResponse:
                         ],
                     }
                 ],
-                "max_tokens": 180,
+                "max_output_tokens": 180,
             },
             timeout=20,
         )
@@ -513,6 +513,11 @@ def run_ai() -> JSONResponse:
         if not content:
             raise ValueError("火山返回中没有可解析的 output_text")
         ai_result.update(parse_ai_text(content))
+    except requests.HTTPError as exc:
+        detail = str(exc)
+        if exc.response is not None and exc.response.text:
+            detail = f"{detail}; {exc.response.text[:500]}"
+        ai_result.update(local_ai_fallback("ERROR", detail))
     except Exception as exc:
         ai_result.update(local_ai_fallback("ERROR", str(exc)))
     return JSONResponse(ai_result)
