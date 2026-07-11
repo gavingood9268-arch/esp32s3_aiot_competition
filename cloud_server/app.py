@@ -123,10 +123,35 @@ def local_ai_fallback(status: str = "STUB", error: str = "") -> dict[str, Any]:
     }
 
 
-def ark_chat_url() -> str:
+def ark_responses_url() -> str:
     if ARK_ENDPOINT:
         return ARK_ENDPOINT
-    return f"{ARK_BASE_URL.rstrip('/')}/chat/completions"
+    return f"{ARK_BASE_URL.rstrip('/')}/responses"
+
+
+def ark_model_id() -> str:
+    if ARK_MODEL == "DeepSeek-V4-flash":
+        return "deepseek-v4-flash-260425"
+    return ARK_MODEL
+
+
+def extract_response_text(data: dict[str, Any]) -> str:
+    output_text = data.get("output_text")
+    if isinstance(output_text, str) and output_text.strip():
+        return output_text
+
+    text_parts: list[str] = []
+    for item in data.get("output", []):
+        if not isinstance(item, dict):
+            continue
+        for content in item.get("content", []):
+            if not isinstance(content, dict):
+                continue
+            text = content.get("text")
+            if isinstance(text, str) and text.strip():
+                text_parts.append(text)
+
+    return "\n".join(text_parts).strip()
 
 
 def parse_ai_text(content: str) -> dict[str, Any]:
@@ -459,24 +484,34 @@ def run_ai() -> JSONResponse:
 
     try:
         response = requests.post(
-            ark_chat_url(),
+            ark_responses_url(),
             headers={"Authorization": f"Bearer {ARK_API_KEY}", "Content-Type": "application/json"},
             json={
-                "model": ARK_MODEL,
-                "messages": [
-                    {"role": "system", "content": "你负责评估 ESP32 AIoT 环境监测终端的风险，并给出中文控制建议。"},
-                    {"role": "user", "content": build_ai_prompt()},
+                "model": ark_model_id(),
+                "stream": False,
+                "input": [
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "input_text",
+                                "text": (
+                                    "你负责评估 ESP32 AIoT 环境监测终端的风险，并给出中文控制建议。\n"
+                                    + build_ai_prompt()
+                                ),
+                            }
+                        ],
+                    }
                 ],
-                "temperature": 0.2,
                 "max_tokens": 180,
             },
             timeout=20,
         )
         response.raise_for_status()
         data = response.json()
-        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+        content = extract_response_text(data)
         if not content:
-            raise ValueError("火山返回中没有 choices[0].message.content")
+            raise ValueError("火山返回中没有可解析的 output_text")
         ai_result.update(parse_ai_text(content))
     except Exception as exc:
         ai_result.update(local_ai_fallback("ERROR", str(exc)))
