@@ -25,7 +25,7 @@ state: dict[str, Any] = {
     "light_raw": None,
     "local_alarm": False,
     "risk": "UNKNOWN",
-    "risk_detail": "Waiting for device data",
+    "risk_detail": "等待 ESP32 上传第一组数据。",
 }
 
 control: dict[str, Any] = {
@@ -41,8 +41,8 @@ control: dict[str, Any] = {
 ai_result: dict[str, Any] = {
     "status": "NOT_RUN",
     "level": 0,
-    "summary": "AI analysis has not been triggered.",
-    "advice": "Upload device data first, then run AI analysis.",
+    "summary": "尚未触发 AI 分析。",
+    "advice": "请先等待 ESP32 上传数据，然后点击“AI 风险分析”。",
     "updated_at": 0,
 }
 
@@ -64,15 +64,15 @@ def compute_local_risk(payload: dict[str, Any]) -> tuple[str, str]:
     light_raw = payload.get("light_raw")
 
     if isinstance(temp, (int, float)) and temp > control["temp_threshold"]:
-        issues.append("temperature")
+        issues.append(f"温度过高（{temp:.1f}°C > {control['temp_threshold']:.1f}°C）")
     if isinstance(humi, (int, float)) and humi > control["humi_threshold"]:
-        issues.append("humidity")
+        issues.append(f"湿度过高（{humi:.1f}% > {control['humi_threshold']:.1f}%）")
     if isinstance(light_raw, (int, float)) and light_raw > control["light_threshold"]:
-        issues.append("light")
+        issues.append(f"光照过强（RAW {int(light_raw)} > {int(control['light_threshold'])}）")
 
     if not issues:
-        return "NORMAL", "All monitored values are within thresholds."
-    return "WARN", "Abnormal: " + ", ".join(issues)
+        return "NORMAL", "当前温度、湿度和光照均处于设定阈值范围内。"
+    return "WARN", "；".join(issues)
 
 
 def html_page() -> str:
@@ -150,6 +150,11 @@ def html_page() -> str:
       padding: 9px 10px;
       font-size: 15px;
     }
+    input[type="checkbox"] {
+      width: auto;
+      transform: scale(1.2);
+      margin-right: 8px;
+    }
     button {
       border: 0;
       border-radius: 6px;
@@ -180,7 +185,7 @@ def html_page() -> str:
         <h1>ESP32 AIoT 环境风险终端</h1>
         <div class="sub">公网网页控制台 · 数据来自 ESP32-S3</div>
       </div>
-      <div id="online" class="pill">Loading</div>
+      <div id="online" class="pill">加载中</div>
     </header>
 
     <section class="grid">
@@ -205,7 +210,10 @@ def html_page() -> str:
           <div><label>温度阈值</label><input id="tempTh" type="number" step="0.1"></div>
           <div><label>湿度阈值</label><input id="humiTh" type="number" step="0.1"></div>
           <div><label>光照 RAW 阈值</label><input id="lightTh" type="number" step="1"></div>
-          <div><label>手动报警</label><input id="manualAlarm" type="number" min="0" max="1" step="1"></div>
+          <div>
+            <label>手动报警测试</label>
+            <div style="padding-top:8px"><input id="manualAlarm" type="checkbox"><span class="sub">强制触发报警，用于测试蜂鸣器/LED/云端下发</span></div>
+          </div>
         </div>
         <div class="btn-row" style="margin-top:12px">
           <button onclick="saveControl()">保存控制</button>
@@ -232,6 +240,23 @@ def html_page() -> str:
       return "status-warn";
     }
 
+    function riskLabel(risk) {
+      if (risk === "NORMAL") return "正常";
+      if (risk === "DANGER") return "危险";
+      if (risk === "WARN") return "预警";
+      return "等待";
+    }
+
+    function setInputValueIfIdle(id, value) {
+      const el = document.getElementById(id);
+      if (document.activeElement !== el) el.value = value;
+    }
+
+    function setCheckboxIfIdle(id, checked) {
+      const el = document.getElementById(id);
+      if (document.activeElement !== el) el.checked = checked;
+    }
+
     async function refresh() {
       const data = await getJson("/api/status");
       const s = data.state;
@@ -239,20 +264,20 @@ def html_page() -> str:
       const ai = data.ai_result;
       const age = s.updated_at ? Math.round(Date.now() / 1000 - s.updated_at) : 999999;
 
-      document.getElementById("online").textContent = s.online ? `Online · ${age}s ago` : "Offline";
+      document.getElementById("online").textContent = s.online ? `在线 · ${age} 秒前更新` : "离线";
       document.getElementById("temp").textContent = s.temperature == null ? "--" : `${s.temperature.toFixed(1)}°C`;
       document.getElementById("humi").textContent = s.humidity == null ? "--" : `${s.humidity.toFixed(1)}%`;
       document.getElementById("light").textContent = s.light_level == null ? "--" : `${s.light_level}%`;
       const riskEl = document.getElementById("risk");
-      riskEl.textContent = s.risk;
+      riskEl.textContent = riskLabel(s.risk);
       riskEl.className = "metric-value " + clsByRisk(s.risk);
       document.getElementById("riskDetail").textContent = s.risk_detail;
       document.getElementById("aiSummary").textContent = ai.summary;
       document.getElementById("aiAdvice").textContent = ai.advice;
-      document.getElementById("tempTh").value = c.temp_threshold;
-      document.getElementById("humiTh").value = c.humi_threshold;
-      document.getElementById("lightTh").value = c.light_threshold;
-      document.getElementById("manualAlarm").value = c.manual_alarm ? 1 : 0;
+      setInputValueIfIdle("tempTh", c.temp_threshold);
+      setInputValueIfIdle("humiTh", c.humi_threshold);
+      setInputValueIfIdle("lightTh", c.light_threshold);
+      setCheckboxIfIdle("manualAlarm", c.manual_alarm);
       document.getElementById("raw").textContent = JSON.stringify(data, null, 2);
     }
 
@@ -264,7 +289,7 @@ def html_page() -> str:
           temp_threshold: Number(document.getElementById("tempTh").value),
           humi_threshold: Number(document.getElementById("humiTh").value),
           light_threshold: Number(document.getElementById("lightTh").value),
-          manual_alarm: Number(document.getElementById("manualAlarm").value) === 1
+          manual_alarm: document.getElementById("manualAlarm").checked
         })
       });
       await refresh();
@@ -309,7 +334,7 @@ async def update_device(request: Request) -> dict[str, Any]:
     )
     risk, detail = compute_local_risk(state)
     state["risk"] = "WARN" if control.get("manual_alarm") else risk
-    state["risk_detail"] = "Manual alarm enabled." if control.get("manual_alarm") else detail
+    state["risk_detail"] = "手动报警测试已开启：云端正在强制下发报警指令。" if control.get("manual_alarm") else detail
     return {"ok": True, "control": control, "ai_result": ai_result}
 
 
@@ -339,8 +364,8 @@ def run_ai() -> JSONResponse:
             {
                 "status": "NO_DATA",
                 "level": 0,
-                "summary": "No device data has been uploaded yet.",
-                "advice": "Power on ESP32 and wait for the first upload.",
+                "summary": "暂无设备数据。",
+                "advice": "请先给 ESP32 上电并等待第一组传感器数据上传。",
                 "updated_at": int(time.time()),
             }
         )
@@ -351,17 +376,18 @@ def run_ai() -> JSONResponse:
             {
                 "status": "STUB",
                 "level": 1 if state["risk"] == "NORMAL" else 2,
-                "summary": f"Local risk is {state['risk']}.",
-                "advice": "Volcano AI is not configured yet. This is a local rule-based placeholder.",
+                "summary": "本地规则分析完成。",
+                "advice": "火山引擎大模型尚未配置。当前结果来自本地阈值规则，可用于先演示“云端分析”入口；后续接入火山 API 后会替换为大模型建议。",
                 "updated_at": int(time.time()),
             }
         )
         return JSONResponse(ai_result)
 
     prompt = (
-        "You are an AIoT environmental risk assistant. "
-        "Analyze this ESP32 sensor data and return concise Chinese advice. "
-        f"Data: {state}. Thresholds: {control}."
+        "你是一个 AIoT 环境风险评估助手。"
+        "请根据 ESP32 上传的温度、湿度、光照数据和阈值，给出中文风险等级、原因和控制建议。"
+        "回答要简短，适合展示在竞赛演示网页上。"
+        f"传感器数据：{state}。阈值与控制状态：{control}。"
     )
     try:
         response = requests.post(
@@ -369,7 +395,7 @@ def run_ai() -> JSONResponse:
             headers={"Authorization": f"Bearer {ARK_API_KEY}", "Content-Type": "application/json"},
             json={
                 "messages": [
-                    {"role": "system", "content": "You assess environmental risk for an ESP32 AIoT terminal."},
+                    {"role": "system", "content": "你负责评估 ESP32 AIoT 环境监测终端的风险，并给出中文控制建议。"},
                     {"role": "user", "content": prompt},
                 ]
             },
@@ -381,7 +407,7 @@ def run_ai() -> JSONResponse:
             {
                 "status": "OK",
                 "level": 1 if state["risk"] == "NORMAL" else 2,
-                "summary": "AI analysis completed.",
+                "summary": "AI 分析完成。",
                 "advice": content,
                 "updated_at": int(time.time()),
             }
@@ -391,8 +417,8 @@ def run_ai() -> JSONResponse:
             {
                 "status": "ERROR",
                 "level": 0,
-                "summary": "AI request failed.",
-                "advice": str(exc),
+                "summary": "AI 请求失败。",
+                "advice": f"请检查火山引擎 API Key、Endpoint 和 Render 环境变量。错误信息：{exc}",
                 "updated_at": int(time.time()),
             }
         )
