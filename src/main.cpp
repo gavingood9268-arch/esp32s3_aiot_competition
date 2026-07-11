@@ -25,7 +25,7 @@ const unsigned long LED_HEARTBEAT_INTERVAL_MS = 1000;
 const int LIGHT_SAMPLE_COUNT = 8;
 const uint8_t DISPLAY_ROTATION = 2;
 const bool LED_ACTIVE_HIGH = true;
-const bool BUZZER_ACTIVE_HIGH = false;
+const bool BUZZER_ACTIVE_HIGH = true;
 
 WebServer server(80);
 
