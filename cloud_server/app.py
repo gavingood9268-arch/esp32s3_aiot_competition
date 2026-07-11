@@ -354,6 +354,13 @@ async def set_control(request: Request) -> dict[str, Any]:
         if key in payload:
             control[key] = bool(payload[key])
     control["command_id"] = int(control["command_id"]) + 1
+    if control.get("manual_alarm"):
+        state["risk"] = "WARN"
+        state["risk_detail"] = "手动报警测试已开启：云端正在强制下发报警指令。"
+    elif state.get("updated_at"):
+        risk, detail = compute_local_risk(state)
+        state["risk"] = risk
+        state["risk_detail"] = detail
     return {"ok": True, "control": control}
 
 

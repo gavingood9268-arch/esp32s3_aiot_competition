@@ -37,6 +37,7 @@ int lightLevel = 0;
 float tempThreshold = 30.0, humiThreshold = 80.0;
 int lightThreshold = 3950;
 bool isAlarming = false;
+bool cloudManualAlarm = false;
 int currentPage = 0;  // 0 overview, 1 QR code
 String ipAddr = "";
 bool wifiConnected = false;
@@ -86,7 +87,7 @@ void readSensors() {
 }
 
 void checkAlarm() {
-    isAlarming = (temp > tempThreshold || humi > humiThreshold || light > lightThreshold);
+    isAlarming = cloudManualAlarm || temp > tempThreshold || humi > humiThreshold || light > lightThreshold;
 }
 
 bool cloudEnabled() {
@@ -149,8 +150,8 @@ void syncCloud() {
         tempThreshold = extractJsonFloat(body, "temp_threshold", tempThreshold);
         humiThreshold = extractJsonFloat(body, "humi_threshold", humiThreshold);
         lightThreshold = (int)extractJsonFloat(body, "light_threshold", lightThreshold);
-        bool manualAlarm = extractJsonBool(body, "manual_alarm", false);
-        if (manualAlarm) isAlarming = true;
+        cloudManualAlarm = extractJsonBool(body, "manual_alarm", false);
+        checkAlarm();
     } else {
         cloudStatus = "ERR";
     }
@@ -175,6 +176,7 @@ int currentAlarmMask() {
     if (isTempAlarm()) mask |= 1;
     if (isHumiAlarm()) mask |= 2;
     if (isLightAlarm()) mask |= 4;
+    if (cloudManualAlarm && mask == 0) mask = 1;
     return mask;
 }
 
@@ -268,6 +270,7 @@ String riskText() {
 
 String riskDetailText() {
     if (!isAlarming) return "ALL NORMAL";
+    if (cloudManualAlarm) return "MANUAL";
     String text = "";
     if (isTempAlarm()) text += "TEMP";
     if (isHumiAlarm()) {
