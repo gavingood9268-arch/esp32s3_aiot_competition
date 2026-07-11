@@ -26,6 +26,7 @@ const int LIGHT_SAMPLE_COUNT = 8;
 const uint8_t DISPLAY_ROTATION = 2;
 const bool LED_ACTIVE_HIGH = true;
 const bool BUZZER_ACTIVE_HIGH = false;
+const unsigned int BUZZER_TONE_HZ = 2600;
 
 WebServer server(80);
 
@@ -66,8 +67,12 @@ void setBuzzerOutput(bool on) {
     if (on == buzzerOutputOn) {
         return;
     }
-    noTone(BUZZER_PIN);
-    digitalWrite(BUZZER_PIN, (on == BUZZER_ACTIVE_HIGH) ? HIGH : LOW);
+    if (on) {
+        tone(BUZZER_PIN, BUZZER_TONE_HZ);
+    } else {
+        noTone(BUZZER_PIN);
+        digitalWrite(BUZZER_PIN, BUZZER_ACTIVE_HIGH ? LOW : HIGH);
+    }
     buzzerOutputOn = on;
 }
 
