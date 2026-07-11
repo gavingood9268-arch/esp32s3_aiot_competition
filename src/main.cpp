@@ -26,7 +26,10 @@ const int LIGHT_SAMPLE_COUNT = 8;
 const uint8_t DISPLAY_ROTATION = 2;
 const bool LED_ACTIVE_HIGH = true;
 const bool BUZZER_ACTIVE_HIGH = false;
-const unsigned int BUZZER_TONE_HZ = 2600;
+const uint8_t BUZZER_PWM_CHANNEL = 0;
+const uint8_t BUZZER_PWM_RESOLUTION = 8;
+const uint32_t BUZZER_PWM_DUTY = BUZZER_ACTIVE_HIGH ? 32 : 223;
+const unsigned int BUZZER_STARTUP_HZ = 2200;
 
 WebServer server(80);
 
@@ -52,6 +55,7 @@ unsigned long lastBuzzerPattern = 0;
 int buzzerAlarmMask = 0;
 bool alarmPulseOn = false;
 bool buzzerOutputOn = true;
+unsigned int buzzerToneHz = 0;
 String cloudStatus = "OFF";
 
 bool isTempAlarm();
@@ -63,26 +67,29 @@ void setLed(bool on) {
     digitalWrite(LED_PIN, (on == LED_ACTIVE_HIGH) ? HIGH : LOW);
 }
 
-void setBuzzerOutput(bool on) {
-    if (on == buzzerOutputOn) {
+void setBuzzerOutput(bool on, unsigned int frequencyHz = BUZZER_STARTUP_HZ) {
+    if (on == buzzerOutputOn && (!on || frequencyHz == buzzerToneHz)) {
         return;
     }
     if (on) {
-        tone(BUZZER_PIN, BUZZER_TONE_HZ);
+        ledcWriteTone(BUZZER_PWM_CHANNEL, frequencyHz);
+        ledcWrite(BUZZER_PWM_CHANNEL, BUZZER_PWM_DUTY);
+        buzzerToneHz = frequencyHz;
     } else {
-        noTone(BUZZER_PIN);
+        ledcWrite(BUZZER_PWM_CHANNEL, BUZZER_ACTIVE_HIGH ? 0 : 255);
         digitalWrite(BUZZER_PIN, BUZZER_ACTIVE_HIGH ? LOW : HIGH);
+        buzzerToneHz = 0;
     }
     buzzerOutputOn = on;
 }
 
 void testBuzzerAtStartup() {
-    setBuzzerOutput(true);
-    delay(350);
+    setBuzzerOutput(true, 1800);
+    delay(140);
     setBuzzerOutput(false);
-    delay(150);
-    setBuzzerOutput(true);
-    delay(180);
+    delay(120);
+    setBuzzerOutput(true, 2600);
+    delay(100);
     setBuzzerOutput(false);
 }
 
@@ -218,13 +225,13 @@ bool patternOutputAt(unsigned long elapsed, const unsigned int* pattern, int len
 }
 
 bool alarmOutputAt(int mask, unsigned long elapsed) {
-    static const unsigned int tempOnly[] = {300};
-    static const unsigned int humiOnly[] = {190, 190, 190};
-    static const unsigned int lightOnly[] = {120, 140, 120, 140, 120};
-    static const unsigned int tempHumi[] = {320, 260, 140};
-    static const unsigned int tempLight[] = {320, 260, 120, 140, 120, 140, 120};
-    static const unsigned int humiLight[] = {170, 170, 170, 300, 320};
-    static const unsigned int allAlarm[] = {120, 130, 120, 130, 120, 280, 380};
+    static const unsigned int tempOnly[] = {260};
+    static const unsigned int humiOnly[] = {120, 160, 120};
+    static const unsigned int lightOnly[] = {85, 110, 85, 110, 85};
+    static const unsigned int tempHumi[] = {260, 220, 120};
+    static const unsigned int tempLight[] = {260, 220, 85, 110, 85, 110, 85};
+    static const unsigned int humiLight[] = {120, 150, 120, 230, 260};
+    static const unsigned int allAlarm[] = {90, 110, 90, 110, 90, 240, 260};
 
     switch (mask & 7) {
         case 1:
@@ -243,6 +250,27 @@ bool alarmOutputAt(int mask, unsigned long elapsed) {
             return patternOutputAt(elapsed, allAlarm, sizeof(allAlarm) / sizeof(allAlarm[0]));
         default:
             return false;
+    }
+}
+
+unsigned int alarmFrequencyForMask(int mask) {
+    switch (mask & 7) {
+        case 1:
+            return 1500;
+        case 2:
+            return 2200;
+        case 3:
+            return 1800;
+        case 4:
+            return 3100;
+        case 5:
+            return 2600;
+        case 6:
+            return 2800;
+        case 7:
+            return 2400;
+        default:
+            return BUZZER_STARTUP_HZ;
     }
 }
 
@@ -265,7 +293,7 @@ void updateBuzzerStatus() {
 
     unsigned long elapsed = now - buzzerPatternStart;
     alarmPulseOn = alarmOutputAt(buzzerAlarmMask, elapsed);
-    setBuzzerOutput(alarmPulseOn);
+    setBuzzerOutput(alarmPulseOn, alarmFrequencyForMask(buzzerAlarmMask));
 }
 
 void blinkLedAtStartup() {
@@ -526,6 +554,8 @@ void setup() {
     pinMode(BUTTON_PIN, INPUT_PULLUP);
     pinMode(BUZZER_PIN, OUTPUT);
     pinMode(LED_PIN, OUTPUT);
+    ledcSetup(BUZZER_PWM_CHANNEL, BUZZER_STARTUP_HZ, BUZZER_PWM_RESOLUTION);
+    ledcAttachPin(BUZZER_PIN, BUZZER_PWM_CHANNEL);
     setBuzzerOutput(false);
     testBuzzerAtStartup();
     setLed(false);
