@@ -276,7 +276,7 @@ def html_page() -> str:
     }
 
     refresh();
-    setInterval(refresh, 3000);
+    setInterval(refresh, 2000);
   </script>
 </body>
 </html>"""
@@ -397,4 +397,3 @@ def run_ai() -> JSONResponse:
             }
         )
     return JSONResponse(ai_result)
-

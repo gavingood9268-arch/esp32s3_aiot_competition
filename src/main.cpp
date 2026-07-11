@@ -20,7 +20,7 @@
 #define LIGHT_PIN  8
 
 const unsigned long SENSOR_REFRESH_INTERVAL_MS = 3000;
-const unsigned long CLOUD_SYNC_INTERVAL_MS = 6000;
+const unsigned long CLOUD_SYNC_INTERVAL_MS = 3000;
 const unsigned long LED_HEARTBEAT_INTERVAL_MS = 1000;
 const int LIGHT_SAMPLE_COUNT = 8;
 const uint8_t DISPLAY_ROTATION = 2;
