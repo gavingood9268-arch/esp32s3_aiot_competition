@@ -25,7 +25,7 @@ const unsigned long LED_HEARTBEAT_INTERVAL_MS = 1000;
 const int LIGHT_SAMPLE_COUNT = 8;
 const uint8_t DISPLAY_ROTATION = 2;
 const bool LED_ACTIVE_HIGH = true;
-const bool BUZZER_ACTIVE_HIGH = true;
+const bool BUZZER_ACTIVE_HIGH = false;
 
 WebServer server(80);
 
@@ -50,7 +50,7 @@ unsigned long buzzerPatternStart = 0;
 unsigned long lastBuzzerPattern = 0;
 int buzzerAlarmMask = 0;
 bool alarmPulseOn = false;
-bool buzzerOutputOn = false;
+bool buzzerOutputOn = true;
 String cloudStatus = "OFF";
 
 bool isTempAlarm();
@@ -69,6 +69,16 @@ void setBuzzerOutput(bool on) {
     noTone(BUZZER_PIN);
     digitalWrite(BUZZER_PIN, (on == BUZZER_ACTIVE_HIGH) ? HIGH : LOW);
     buzzerOutputOn = on;
+}
+
+void testBuzzerAtStartup() {
+    setBuzzerOutput(true);
+    delay(350);
+    setBuzzerOutput(false);
+    delay(150);
+    setBuzzerOutput(true);
+    delay(180);
+    setBuzzerOutput(false);
 }
 
 int readLightRaw() {
@@ -187,7 +197,7 @@ int currentAlarmMask() {
     if (isTempAlarm()) mask |= 1;
     if (isHumiAlarm()) mask |= 2;
     if (isLightAlarm()) mask |= 4;
-    if (cloudManualAlarm && mask == 0) mask = 1;
+    if (cloudManualAlarm && mask == 0) mask = 7;
     return mask;
 }
 
@@ -512,6 +522,7 @@ void setup() {
     pinMode(BUZZER_PIN, OUTPUT);
     pinMode(LED_PIN, OUTPUT);
     setBuzzerOutput(false);
+    testBuzzerAtStartup();
     setLed(false);
     blinkLedAtStartup();
     pinMode(LIGHT_PIN, INPUT);
