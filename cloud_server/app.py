@@ -26,6 +26,7 @@ BAILIAN_BASE_URL = os.getenv(
     "https://ws-t2igo4r0mezggvl0.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
 )
 BAILIAN_ENDPOINT = os.getenv("BAILIAN_ENDPOINT", "")
+BAILIAN_ENABLE_THINKING = os.getenv("BAILIAN_ENABLE_THINKING", "false").lower() == "true"
 
 state: dict[str, Any] = {
     "device_id": DEVICE_ID,
@@ -59,6 +60,7 @@ ai_result: dict[str, Any] = {
     "compound_risk": "等待云端生成组合风险判断。",
     "advice": "请先等待 ESP32 上传数据，然后点击“AI 风险分析”。",
     "demo_note": "网页端会展示完整分析，设备端小屏只显示结论。",
+    "diagnostic": "",
     "updated_at": 0,
 }
 
@@ -142,7 +144,8 @@ def local_ai_fallback(status: str = "STUB", error: str = "") -> dict[str, Any]:
         demo_note = "ESP32 上传异常数据后，云端完成风险判断并将预警结果回传设备端。"
 
     if error:
-        advice = f"{advice} 百炼接口暂未返回，已使用本地规则兜底。错误：{error}"
+        advice = f"{advice} 当前云端规则兜底已生效，设备端仍可继续报警与下行控制演示。"
+        demo_note = "百炼实时分析未在本轮限定时间内完成，系统已自动切换为规则兜底结果。"
 
     return {
         "status": status,
@@ -153,6 +156,7 @@ def local_ai_fallback(status: str = "STUB", error: str = "") -> dict[str, Any]:
         "compound_risk": compound_risk,
         "advice": advice,
         "demo_note": demo_note,
+        "diagnostic": error,
         "updated_at": int(time.time()),
     }
 
@@ -250,6 +254,7 @@ def run_ai_analysis() -> dict[str, Any]:
             json={
                 "model": BAILIAN_MODEL,
                 "stream": False,
+                "enable_thinking": BAILIAN_ENABLE_THINKING,
                 "messages": [
                     {
                         "role": "system",
@@ -266,7 +271,7 @@ def run_ai_analysis() -> dict[str, Any]:
                 "max_tokens": 520,
                 "temperature": 0.2,
             },
-            timeout=20,
+            timeout=(10, 60),
         )
         response.raise_for_status()
         data = response.json()
@@ -274,6 +279,8 @@ def run_ai_analysis() -> dict[str, Any]:
         if not content:
             raise ValueError("百炼返回中没有可解析的 choices[0].message.content")
         ai_result.update(parse_ai_text(content))
+    except requests.Timeout as exc:
+        ai_result.update(local_ai_fallback("STUB", f"百炼响应超时：{exc}"))
     except requests.HTTPError as exc:
         detail = str(exc)
         if exc.response is not None and exc.response.text:
