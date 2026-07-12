@@ -43,7 +43,7 @@ float tempThreshold = 30.0, humiThreshold = 80.0;
 int lightThreshold = 3950;
 bool isAlarming = false;
 bool cloudManualAlarm = false;
-int currentPage = 0;  // 0 overview, 1 QR code
+int currentPage = 0;  // 0 overview, 1 AI status, 2 QR code
 String ipAddr = "";
 bool wifiConnected = false;
 unsigned long lastSensorRefresh = 0;
@@ -60,6 +60,7 @@ String cloudStatus = "OFF";
 String aiStatus = "WAIT";
 String aiRisk = "--";
 String aiSummary = "NO AI";
+String aiAdvice = "--";
 
 bool isTempAlarm();
 bool isHumiAlarm();
@@ -216,6 +217,7 @@ void syncCloud() {
         aiStatus = extractJsonString(body, "status", aiStatus);
         aiRisk = extractJsonString(body, "risk", aiRisk);
         aiSummary = extractJsonString(body, "summary", aiSummary);
+        aiAdvice = extractJsonString(body, "advice", aiAdvice);
         checkAlarm();
     } else {
         cloudStatus = "ERR";
@@ -380,9 +382,28 @@ String aiShortStatus() {
     if (aiStatus == "OK") return "OK";
     if (aiStatus == "ERROR") return "ERR";
     if (aiStatus == "STUB") return "RULE";
+    if (aiStatus == "RUNNING") return "RUN";
     if (aiStatus == "NO_DATA") return "NO";
     if (aiStatus == "NOT_RUN") return "WAIT";
     return aiStatus.length() > 4 ? aiStatus.substring(0, 4) : aiStatus;
+}
+
+String aiRiskLabel() {
+    if (aiRisk.indexOf("危险") >= 0) return "DANGER";
+    if (aiRisk.indexOf("预警") >= 0) return "WARN";
+    if (aiRisk.indexOf("关注") >= 0) return "WATCH";
+    if (aiRisk.indexOf("正常") >= 0) return "NORMAL";
+    if (aiRisk.length() == 0 || aiRisk == "未分析") return "--";
+    return aiRisk.length() > 8 ? aiRisk.substring(0, 8) : aiRisk;
+}
+
+uint16_t aiRiskColor() {
+    String label = aiRiskLabel();
+    if (label == "DANGER") return ST77XX_RED;
+    if (label == "WARN") return ST77XX_ORANGE;
+    if (label == "WATCH") return ST77XX_YELLOW;
+    if (label == "NORMAL") return ST77XX_GREEN;
+    return ST77XX_CYAN;
 }
 
 void drawThermometerIcon(int x, int y, uint16_t color) {
@@ -518,6 +539,57 @@ void drawOverviewPage() {
     tft.print(aiShortStatus());
 }
 
+void drawAiStatusPage() {
+    tft.fillScreen(0x0841);
+    tft.drawRoundRect(8, 8, 224, 224, 8, ST77XX_MAGENTA);
+    tft.setTextSize(2);
+    tft.setTextColor(ST77XX_MAGENTA);
+    tft.setCursor(48, 18);
+    tft.print("CLOUD AI");
+
+    tft.setTextSize(1);
+    tft.setTextColor(0xC618);
+    tft.setCursor(22, 52);
+    tft.print("CLOUD:");
+    tft.setTextColor(cloudStatus == "OK" ? ST77XX_GREEN : ST77XX_RED);
+    tft.print(cloudStatus);
+    tft.setTextColor(0xC618);
+    tft.print("  AI:");
+    tft.setTextColor(aiStatus == "OK" ? ST77XX_GREEN : ST77XX_YELLOW);
+    tft.print(aiShortStatus());
+
+    tft.fillRoundRect(20, 74, 200, 52, 6, ST77XX_WHITE);
+    tft.drawRoundRect(20, 74, 200, 52, 6, aiRiskColor());
+    tft.setTextSize(1);
+    tft.setTextColor(0x4208);
+    tft.setCursor(32, 84);
+    tft.print("AI RISK");
+    tft.setTextSize(2);
+    tft.setTextColor(aiRiskColor());
+    tft.setCursor(32, 102);
+    tft.print(aiRiskLabel());
+
+    tft.setTextSize(1);
+    tft.setTextColor(ST77XX_WHITE);
+    tft.setCursor(22, 142);
+    tft.print("AUTO ANALYSIS: ON");
+    tft.setCursor(22, 158);
+    tft.print("TEMP:");
+    tft.print(isTempAlarm() ? "HIGH" : "OK");
+    tft.print(" HUMI:");
+    tft.print(isHumiAlarm() ? "HIGH" : "OK");
+    tft.setCursor(22, 174);
+    tft.print("LIGHT:");
+    tft.print(isLightAlarm() ? "HIGH" : "OK");
+    tft.print(" ALARM:");
+    tft.print(isAlarming ? "ON" : "OFF");
+    tft.setCursor(22, 198);
+    tft.setTextColor(ST77XX_CYAN);
+    tft.print("Advice on Web Dashboard");
+    tft.setCursor(22, 214);
+    tft.print("Btn: ENV > AI > QR");
+}
+
 void updateDataPageValues() {
     tft.fillRect(0, 38, 240, 146, 0x0841);
     drawOverviewValues();
@@ -533,8 +605,10 @@ void updateDataPageValues() {
 }
 
 void drawPage() {
-    if (currentPage == 1) {
+    if (currentPage == 2) {
         drawQrCodePage();
+    } else if (currentPage == 1) {
+        drawAiStatusPage();
     } else {
         drawOverviewPage();
     }
@@ -553,7 +627,7 @@ void handleButton() {
         if (pressing) {
             pressing = false;
             if (millis() - pressStart > 50) {
-                currentPage = (currentPage + 1) % 2;
+                currentPage = (currentPage + 1) % 3;
                 drawPage();
                 lastSensorRefresh = millis();
             }
@@ -570,6 +644,11 @@ void handleRoot() {
     html += "<p>湿度: " + String(humi) + " %</p>";
     html += "<p>光照指数: " + String(lightLevel) + " %</p>";
     html += "<p>光照ADC原始值: " + String(light) + " / 4095</p>";
+    html += "<p>云端状态: " + cloudStatus + "</p>";
+    html += "<p>AI状态: " + aiStatus + "</p>";
+    html += "<p>AI风险: " + aiRisk + "</p>";
+    html += "<p>AI说明: " + aiSummary + "</p>";
+    html += "<p>AI建议: " + aiAdvice + "</p>";
     html += "<form action='/set'>";
     html += "温度阈值: <input name='temp' value='" + String(tempThreshold) + "'><br>";
     html += "湿度阈值: <input name='humi' value='" + String(humiThreshold) + "'><br>";
@@ -656,12 +735,19 @@ void loop() {
         checkAlarm();
         if (currentPage == 0) {
             updateDataPageValues();
+        } else if (currentPage == 1) {
+            drawAiStatusPage();
         }
     }
 
     if (now - lastCloudSync > CLOUD_SYNC_INTERVAL_MS) {
         lastCloudSync = now;
         syncCloud();
+        if (currentPage == 1) {
+            drawAiStatusPage();
+        } else if (currentPage == 0) {
+            updateDataPageValues();
+        }
     }
 
     delay(50);

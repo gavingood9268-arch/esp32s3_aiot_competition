@@ -33,8 +33,7 @@ C:\Users\55363\Desktop\物联网数据大赛\esp32s3_aiot_competition
 - Wi-Fi STA 联网模式
 - HTTP POST 上传环境 JSON
 - 中转服务器接口
-- 火山引擎大模型调用
+- 阿里云百炼 qwen3.7-max 大模型调用
 - AI 风险等级显示
 - 大模型下发阈值和报警策略
 - 本地断网兜底逻辑
-

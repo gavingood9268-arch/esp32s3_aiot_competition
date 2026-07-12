@@ -1,4 +1,5 @@
 import os
+import threading
 import time
 from typing import Any
 
@@ -12,6 +13,7 @@ load_dotenv()
 app = FastAPI(title="ESP32 AIoT Cloud")
 
 DEVICE_ID = os.getenv("DEVICE_ID", "esp32s3-env-001")
+AI_AUTO_INTERVAL_SEC = int(os.getenv("AI_AUTO_INTERVAL_SEC", "30"))
 BAILIAN_API_KEY = (
     os.getenv("BAILIAN_API_KEY")
     or os.getenv("DASHSCOPE_API_KEY")
@@ -56,6 +58,10 @@ ai_result: dict[str, Any] = {
     "advice": "请先等待 ESP32 上传数据，然后点击“AI 风险分析”。",
     "updated_at": 0,
 }
+
+ai_lock = threading.Lock()
+ai_analysis_in_progress = False
+last_auto_ai_at = 0
 
 
 def now_ms() -> int:
@@ -189,6 +195,101 @@ def parse_ai_text(content: str) -> dict[str, Any]:
         "advice": advice,
         "updated_at": int(time.time()),
     }
+
+
+def run_ai_analysis() -> dict[str, Any]:
+    if not state.get("updated_at"):
+        ai_result.update(
+            {
+                "status": "NO_DATA",
+                "level": 0,
+                "summary": "暂无设备数据。",
+                "advice": "请先给 ESP32 上电并等待第一组传感器数据上传。",
+                "updated_at": int(time.time()),
+            }
+        )
+        return dict(ai_result)
+
+    if not BAILIAN_API_KEY or not BAILIAN_MODEL:
+        ai_result.update(local_ai_fallback())
+        return dict(ai_result)
+
+    try:
+        response = requests.post(
+            bailian_chat_url(),
+            headers={"Authorization": f"Bearer {BAILIAN_API_KEY}", "Content-Type": "application/json"},
+            json={
+                "model": BAILIAN_MODEL,
+                "stream": False,
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "你是一个严谨、简洁的中文 AIoT 环境风险评估助手。",
+                    },
+                    {
+                        "role": "user",
+                        "content": (
+                            "你负责评估 ESP32 AIoT 环境监测终端的风险，并给出中文控制建议。\n"
+                            + build_ai_prompt()
+                        ),
+                    }
+                ],
+                "max_tokens": 180,
+                "temperature": 0.2,
+            },
+            timeout=20,
+        )
+        response.raise_for_status()
+        data = response.json()
+        content = extract_chat_text(data)
+        if not content:
+            raise ValueError("百炼返回中没有可解析的 choices[0].message.content")
+        ai_result.update(parse_ai_text(content))
+    except requests.HTTPError as exc:
+        detail = str(exc)
+        if exc.response is not None and exc.response.text:
+            detail = f"{detail}; {exc.response.text[:500]}"
+        ai_result.update(local_ai_fallback("ERROR", detail))
+    except Exception as exc:
+        ai_result.update(local_ai_fallback("ERROR", str(exc)))
+    return dict(ai_result)
+
+
+def should_auto_run_ai() -> bool:
+    if not state.get("updated_at"):
+        return False
+    if seconds_since(last_auto_ai_at) < AI_AUTO_INTERVAL_SEC:
+        return False
+    if control.get("manual_alarm") or state.get("risk") != "NORMAL":
+        return True
+    return ai_result.get("status") == "OK" and ai_result.get("risk") != "正常"
+
+
+def start_auto_ai_if_needed() -> None:
+    global ai_analysis_in_progress, last_auto_ai_at
+    with ai_lock:
+        if ai_analysis_in_progress or not should_auto_run_ai():
+            return
+        ai_analysis_in_progress = True
+        last_auto_ai_at = int(time.time())
+        ai_result.update(
+            {
+                "status": "RUNNING",
+                "summary": "云端 AI 正在根据最新数据分析风险。",
+                "advice": "请稍候，分析完成后会自动刷新。",
+                "updated_at": int(time.time()),
+            }
+        )
+
+    def worker() -> None:
+        global ai_analysis_in_progress
+        try:
+            run_ai_analysis()
+        finally:
+            with ai_lock:
+                ai_analysis_in_progress = False
+
+    threading.Thread(target=worker, daemon=True).start()
 
 
 def html_page() -> str:
@@ -452,6 +553,7 @@ async def update_device(request: Request) -> dict[str, Any]:
     risk, detail = compute_local_risk(state)
     state["risk"] = "WARN" if control.get("manual_alarm") else risk
     state["risk_detail"] = "手动报警测试已开启：云端正在强制下发报警指令。" if control.get("manual_alarm") else detail
+    start_auto_ai_if_needed()
     return {"ok": True, "control": control, "ai_result": ai_result}
 
 
@@ -483,58 +585,4 @@ async def set_control(request: Request) -> dict[str, Any]:
 
 @app.post("/api/ai")
 def run_ai() -> JSONResponse:
-    if not state.get("updated_at"):
-        ai_result.update(
-            {
-                "status": "NO_DATA",
-                "level": 0,
-                "summary": "暂无设备数据。",
-                "advice": "请先给 ESP32 上电并等待第一组传感器数据上传。",
-                "updated_at": int(time.time()),
-            }
-        )
-        return JSONResponse(ai_result)
-
-    if not BAILIAN_API_KEY or not BAILIAN_MODEL:
-        ai_result.update(local_ai_fallback())
-        return JSONResponse(ai_result)
-
-    try:
-        response = requests.post(
-            bailian_chat_url(),
-            headers={"Authorization": f"Bearer {BAILIAN_API_KEY}", "Content-Type": "application/json"},
-            json={
-                "model": BAILIAN_MODEL,
-                "stream": False,
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": "你是一个严谨、简洁的中文 AIoT 环境风险评估助手。",
-                    },
-                    {
-                        "role": "user",
-                        "content": (
-                            "你负责评估 ESP32 AIoT 环境监测终端的风险，并给出中文控制建议。\n"
-                            + build_ai_prompt()
-                        ),
-                    }
-                ],
-                "max_tokens": 180,
-                "temperature": 0.2,
-            },
-            timeout=20,
-        )
-        response.raise_for_status()
-        data = response.json()
-        content = extract_chat_text(data)
-        if not content:
-            raise ValueError("百炼返回中没有可解析的 choices[0].message.content")
-        ai_result.update(parse_ai_text(content))
-    except requests.HTTPError as exc:
-        detail = str(exc)
-        if exc.response is not None and exc.response.text:
-            detail = f"{detail}; {exc.response.text[:500]}"
-        ai_result.update(local_ai_fallback("ERROR", detail))
-    except Exception as exc:
-        ai_result.update(local_ai_fallback("ERROR", str(exc)))
-    return JSONResponse(ai_result)
+    return JSONResponse(run_ai_analysis())
