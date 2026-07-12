@@ -570,11 +570,9 @@ void drawAiStatusPage() {
     tft.print("WENDU:      SHIDU:");
     tft.setCursor(22, 174);
     tft.print("GUANG:      BAOJING:");
-    tft.setCursor(22, 198);
+    tft.setCursor(22, 202);
     tft.setTextColor(ST77XX_CYAN);
-    tft.print("Jianyi kan shouji web");
-    tft.setCursor(22, 214);
-    tft.print("Anjian: ENV > AI > QR");
+    tft.print("WEB: QR   BTN: NEXT");
     updateAiStatusPageValues();
 }
 
