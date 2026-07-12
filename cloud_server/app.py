@@ -19,7 +19,10 @@ BAILIAN_API_KEY = (
     or ""
 )
 BAILIAN_MODEL = os.getenv("BAILIAN_MODEL", os.getenv("DASHSCOPE_MODEL", "qwen3.7-max"))
-BAILIAN_BASE_URL = os.getenv("BAILIAN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+BAILIAN_BASE_URL = os.getenv(
+    "BAILIAN_BASE_URL",
+    "https://ws-t2igo4r0mezggvl0.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+)
 BAILIAN_ENDPOINT = os.getenv("BAILIAN_ENDPOINT", "")
 
 state: dict[str, Any] = {
