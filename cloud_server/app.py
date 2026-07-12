@@ -55,7 +55,10 @@ ai_result: dict[str, Any] = {
     "level": 0,
     "risk": "未分析",
     "summary": "尚未触发 AI 分析。",
+    "sensor_analysis": "等待设备上传温度、湿度、光照数据。",
+    "compound_risk": "等待云端生成组合风险判断。",
     "advice": "请先等待 ESP32 上传数据，然后点击“AI 风险分析”。",
+    "demo_note": "网页端会展示完整分析，设备端小屏只显示结论。",
     "updated_at": 0,
 }
 
@@ -96,12 +99,17 @@ def build_ai_prompt() -> str:
     return (
         "你是一个用于竞赛展示的 AIoT 环境风险评估助手。"
         "设备是 ESP32-S3 环境风险终端，传感器包括温度、湿度、光照。"
-        "请根据当前数据、阈值和本地报警状态做风险判断。"
-        "要求：用中文，简短，适合网页展示；不要输出 Markdown。"
-        "请严格按三行输出：\n"
+        "请根据当前数据、阈值、本地报警状态和云端控制状态做风险判断。"
+        "分析必须覆盖正常、关注、预警、危险四类可能性，并说明为什么当前属于其中一类。"
+        "需要同时考虑单项异常和组合异常，例如高温高湿、强光高温、手动报警测试。"
+        "要求：用中文，适合竞赛网页展示；不要输出 Markdown；每行控制在 60 字以内。"
+        "请严格按六行输出：\n"
         "风险等级：正常/关注/预警/危险\n"
-        "风险说明：一句话说明原因\n"
-        "控制建议：一句话给出操作建议\n\n"
+        "综合判断：说明当前总体环境是否安全\n"
+        "指标分析：分别说明温度、湿度、光照相对阈值的状态\n"
+        "组合风险：说明多因素叠加后是否会放大风险\n"
+        "控制建议：给出可执行的处理动作\n"
+        "展示说明：说明本次分析体现的上行采集或下行控制能力\n\n"
         f"当前设备数据：{state}\n"
         f"当前阈值与云端控制：{control}\n"
     )
@@ -113,16 +121,25 @@ def local_ai_fallback(status: str = "STUB", error: str = "") -> dict[str, Any]:
     level = 1
     risk_label = "正常"
     advice = "维持当前阈值，继续观察环境变化。"
+    sensor_analysis = "温度、湿度、光照均未超过当前云端阈值。"
+    compound_risk = "当前没有明显多因素叠加风险。"
+    demo_note = "ESP32 已完成数据上行，云端完成规则兜底分析并回传结果。"
 
     if manual:
         level = 3
         risk_label = "预警"
         detail = "手动报警测试已开启，云端正在验证下行控制链路。"
+        sensor_analysis = "传感器数据可正常上行，当前风险主要来自手动报警控制。"
+        compound_risk = "手动报警会强制设备进入演示预警状态，不代表真实环境超限。"
         advice = "比赛演示时可关闭手动报警，再制造真实环境异常进行对比。"
+        demo_note = "本次结果体现云端下发控制后，设备端蜂鸣器和 LED 可响应。"
     elif risk != "NORMAL":
         level = 3
         risk_label = "预警"
+        sensor_analysis = detail
+        compound_risk = "至少一项环境指标超过阈值，若与其他指标叠加需提高处置优先级。"
         advice = "建议检查对应环境因素，并根据现场情况采取通风、遮光或降温处理。"
+        demo_note = "ESP32 上传异常数据后，云端完成风险判断并将预警结果回传设备端。"
 
     if error:
         advice = f"{advice} 百炼接口暂未返回，已使用本地规则兜底。错误：{error}"
@@ -132,7 +149,10 @@ def local_ai_fallback(status: str = "STUB", error: str = "") -> dict[str, Any]:
         "level": level,
         "risk": risk_label,
         "summary": f"风险等级：{risk_label}。{detail}",
+        "sensor_analysis": sensor_analysis,
+        "compound_risk": compound_risk,
         "advice": advice,
+        "demo_note": demo_note,
         "updated_at": int(time.time()),
     }
 
@@ -184,15 +204,21 @@ def parse_ai_text(content: str) -> dict[str, Any]:
     elif "正常" in risk_text:
         risk_label = "正常"
 
-    risk_summary = fields.get("风险说明", text[:160])
+    risk_summary = fields.get("综合判断") or fields.get("风险说明") or text[:160]
+    sensor_analysis = fields.get("指标分析") or "AI 未返回单项指标分析。"
+    compound_risk = fields.get("组合风险") or "AI 未返回组合风险判断。"
     advice = fields.get("控制建议") or fields.get("建议") or "请根据现场情况检查设备与阈值设置。"
+    demo_note = fields.get("展示说明") or "设备数据已上传到云端，AI 分析结果已返回网页和设备端。"
     level_map = {"正常": 1, "关注": 2, "预警": 3, "危险": 4}
     return {
         "status": "OK",
         "level": level_map.get(risk_label, 2),
         "risk": risk_label,
         "summary": risk_summary,
+        "sensor_analysis": sensor_analysis,
+        "compound_risk": compound_risk,
         "advice": advice,
+        "demo_note": demo_note,
         "updated_at": int(time.time()),
     }
 
@@ -204,7 +230,10 @@ def run_ai_analysis() -> dict[str, Any]:
                 "status": "NO_DATA",
                 "level": 0,
                 "summary": "暂无设备数据。",
+                "sensor_analysis": "还没有收到温度、湿度、光照数据。",
+                "compound_risk": "暂无数据，无法判断组合风险。",
                 "advice": "请先给 ESP32 上电并等待第一组传感器数据上传。",
+                "demo_note": "设备上行链路建立后，网页端会自动更新分析结果。",
                 "updated_at": int(time.time()),
             }
         )
@@ -234,7 +263,7 @@ def run_ai_analysis() -> dict[str, Any]:
                         ),
                     }
                 ],
-                "max_tokens": 180,
+                "max_tokens": 520,
                 "temperature": 0.2,
             },
             timeout=20,
@@ -260,9 +289,7 @@ def should_auto_run_ai() -> bool:
         return False
     if seconds_since(last_auto_ai_at) < AI_AUTO_INTERVAL_SEC:
         return False
-    if control.get("manual_alarm") or state.get("risk") != "NORMAL":
-        return True
-    return ai_result.get("status") == "OK" and ai_result.get("risk") != "正常"
+    return True
 
 
 def start_auto_ai_if_needed() -> None:
@@ -418,8 +445,17 @@ def html_page() -> str:
       <div class="card span-2">
         <div class="metric-label">AI 风险说明</div>
         <div id="aiSummary">--</div>
-        <div class="metric-label" style="margin-top:10px">AI 控制建议</div>
-        <div class="sub" id="aiAdvice"></div>
+        <div class="metric-label" style="margin-top:10px">AI 指标分析</div>
+        <div class="sub" id="aiSensorAnalysis"></div>
+        <div class="metric-label" style="margin-top:10px">AI 组合风险</div>
+        <div class="sub" id="aiCompoundRisk"></div>
+      </div>
+
+      <div class="card span-4">
+        <div class="metric-label">AI 控制建议</div>
+        <div id="aiAdvice">--</div>
+        <div class="metric-label" style="margin-top:10px">竞赛展示说明</div>
+        <div class="sub" id="aiDemoNote"></div>
       </div>
 
       <div class="card span-4">
@@ -491,7 +527,10 @@ def html_page() -> str:
       riskEl.className = "metric-value " + clsByRisk(s.risk);
       document.getElementById("riskDetail").textContent = s.risk_detail;
       document.getElementById("aiSummary").textContent = ai.summary;
+      document.getElementById("aiSensorAnalysis").textContent = ai.sensor_analysis || "--";
+      document.getElementById("aiCompoundRisk").textContent = ai.compound_risk || "--";
       document.getElementById("aiAdvice").textContent = ai.advice;
+      document.getElementById("aiDemoNote").textContent = ai.demo_note || "--";
       setInputValueIfIdle("tempTh", c.temp_threshold);
       setInputValueIfIdle("humiTh", c.humi_threshold);
       setInputValueIfIdle("lightTh", c.light_threshold);
