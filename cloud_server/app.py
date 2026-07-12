@@ -12,10 +12,15 @@ load_dotenv()
 app = FastAPI(title="ESP32 AIoT Cloud")
 
 DEVICE_ID = os.getenv("DEVICE_ID", "esp32s3-env-001")
-ARK_API_KEY = os.getenv("ARK_API_KEY", "")
-ARK_BASE_URL = os.getenv("ARK_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3")
-ARK_MODEL = os.getenv("ARK_MODEL", "")
-ARK_ENDPOINT = os.getenv("ARK_ENDPOINT", "")
+BAILIAN_API_KEY = (
+    os.getenv("BAILIAN_API_KEY")
+    or os.getenv("DASHSCOPE_API_KEY")
+    or os.getenv("ALIYUN_API_KEY")
+    or ""
+)
+BAILIAN_MODEL = os.getenv("BAILIAN_MODEL", os.getenv("DASHSCOPE_MODEL", "qwen3.7-max"))
+BAILIAN_BASE_URL = os.getenv("BAILIAN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
+BAILIAN_ENDPOINT = os.getenv("BAILIAN_ENDPOINT", "")
 
 state: dict[str, Any] = {
     "device_id": DEVICE_ID,
@@ -111,7 +116,7 @@ def local_ai_fallback(status: str = "STUB", error: str = "") -> dict[str, Any]:
         advice = "建议检查对应环境因素，并根据现场情况采取通风、遮光或降温处理。"
 
     if error:
-        advice = f"{advice} 火山接口暂未返回，已使用本地规则兜底。错误：{error}"
+        advice = f"{advice} 百炼接口暂未返回，已使用本地规则兜底。错误：{error}"
 
     return {
         "status": status,
@@ -123,54 +128,62 @@ def local_ai_fallback(status: str = "STUB", error: str = "") -> dict[str, Any]:
     }
 
 
-def ark_responses_url() -> str:
-    if ARK_ENDPOINT:
-        return ARK_ENDPOINT
-    return f"{ARK_BASE_URL.rstrip('/')}/responses"
+def bailian_chat_url() -> str:
+    if BAILIAN_ENDPOINT:
+        return BAILIAN_ENDPOINT
+    return f"{BAILIAN_BASE_URL.rstrip('/')}/chat/completions"
 
 
-def ark_model_id() -> str:
-    if ARK_MODEL == "DeepSeek-V4-flash":
-        return "deepseek-v4-flash-260425"
-    return ARK_MODEL
-
-
-def extract_response_text(data: dict[str, Any]) -> str:
-    output_text = data.get("output_text")
-    if isinstance(output_text, str) and output_text.strip():
-        return output_text
-
+def extract_chat_text(data: dict[str, Any]) -> str:
     text_parts: list[str] = []
-    for item in data.get("output", []):
-        if not isinstance(item, dict):
+    for choice in data.get("choices", []):
+        if not isinstance(choice, dict):
             continue
-        for content in item.get("content", []):
-            if not isinstance(content, dict):
-                continue
-            text = content.get("text")
-            if isinstance(text, str) and text.strip():
-                text_parts.append(text)
+        message = choice.get("message")
+        if not isinstance(message, dict):
+            continue
+        content = message.get("content")
+        if isinstance(content, str) and content.strip():
+            text_parts.append(content)
+        elif isinstance(content, list):
+            for item in content:
+                if isinstance(item, dict):
+                    text = item.get("text")
+                    if isinstance(text, str) and text.strip():
+                        text_parts.append(text)
 
     return "\n".join(text_parts).strip()
 
 
 def parse_ai_text(content: str) -> dict[str, Any]:
+    lines = [line.strip() for line in content.strip().splitlines() if line.strip()]
+    fields: dict[str, str] = {}
+    for line in lines:
+        normalized = line.replace("：", ":", 1)
+        if ":" not in normalized:
+            continue
+        key, value = normalized.split(":", 1)
+        fields[key.strip()] = value.strip()
+
     text = " ".join(content.strip().split())
     risk_label = "关注"
-    if "危险" in text:
+    risk_text = fields.get("风险等级", text)
+    if "危险" in risk_text:
         risk_label = "危险"
-    elif "预警" in text:
+    elif "预警" in risk_text:
         risk_label = "预警"
-    elif "正常" in text:
+    elif "正常" in risk_text:
         risk_label = "正常"
 
+    risk_summary = fields.get("风险说明", text[:160])
+    advice = fields.get("控制建议") or fields.get("建议") or "请根据现场情况检查设备与阈值设置。"
     level_map = {"正常": 1, "关注": 2, "预警": 3, "危险": 4}
     return {
         "status": "OK",
         "level": level_map.get(risk_label, 2),
         "risk": risk_label,
-        "summary": text[:160],
-        "advice": text[160:360] if len(text) > 160 else "建议见风险说明。",
+        "summary": risk_summary,
+        "advice": advice,
         "updated_at": int(time.time()),
     }
 
@@ -299,8 +312,9 @@ def html_page() -> str:
         <div id="riskDetail">--</div>
       </div>
       <div class="card span-2">
-        <div class="metric-label">AI 分析</div>
+        <div class="metric-label">AI 风险说明</div>
         <div id="aiSummary">--</div>
+        <div class="metric-label" style="margin-top:10px">AI 控制建议</div>
         <div class="sub" id="aiAdvice"></div>
       </div>
 
@@ -478,40 +492,40 @@ def run_ai() -> JSONResponse:
         )
         return JSONResponse(ai_result)
 
-    if not ARK_API_KEY or not ARK_MODEL:
+    if not BAILIAN_API_KEY or not BAILIAN_MODEL:
         ai_result.update(local_ai_fallback())
         return JSONResponse(ai_result)
 
     try:
         response = requests.post(
-            ark_responses_url(),
-            headers={"Authorization": f"Bearer {ARK_API_KEY}", "Content-Type": "application/json"},
+            bailian_chat_url(),
+            headers={"Authorization": f"Bearer {BAILIAN_API_KEY}", "Content-Type": "application/json"},
             json={
-                "model": ark_model_id(),
+                "model": BAILIAN_MODEL,
                 "stream": False,
-                "input": [
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": "你是一个严谨、简洁的中文 AIoT 环境风险评估助手。",
+                    },
                     {
                         "role": "user",
-                        "content": [
-                            {
-                                "type": "input_text",
-                                "text": (
-                                    "你负责评估 ESP32 AIoT 环境监测终端的风险，并给出中文控制建议。\n"
-                                    + build_ai_prompt()
-                                ),
-                            }
-                        ],
+                        "content": (
+                            "你负责评估 ESP32 AIoT 环境监测终端的风险，并给出中文控制建议。\n"
+                            + build_ai_prompt()
+                        ),
                     }
                 ],
-                "max_output_tokens": 180,
+                "max_tokens": 180,
+                "temperature": 0.2,
             },
             timeout=20,
         )
         response.raise_for_status()
         data = response.json()
-        content = extract_response_text(data)
+        content = extract_chat_text(data)
         if not content:
-            raise ValueError("火山返回中没有可解析的 output_text")
+            raise ValueError("百炼返回中没有可解析的 choices[0].message.content")
         ai_result.update(parse_ai_text(content))
     except requests.HTTPError as exc:
         detail = str(exc)
