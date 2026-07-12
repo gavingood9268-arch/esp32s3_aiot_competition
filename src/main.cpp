@@ -391,7 +391,7 @@ String aiShortStatus() {
 
 String aiRiskLabel() {
     if (aiRisk.indexOf("危险") >= 0) return "DANGER";
-    if (aiRisk.indexOf("预警") >= 0) return "WARN";
+    if (aiRisk.indexOf("预警") >= 0) return "WARNING";
     if (aiRisk.indexOf("关注") >= 0) return "WATCH";
     if (aiRisk.indexOf("正常") >= 0) return "NORMAL";
     if (aiRisk.length() == 0 || aiRisk == "未分析") return "--";
@@ -401,7 +401,7 @@ String aiRiskLabel() {
 uint16_t aiRiskColor() {
     String label = aiRiskLabel();
     if (label == "DANGER") return ST77XX_RED;
-    if (label == "WARN") return ST77XX_ORANGE;
+    if (label == "WARNING") return ST77XX_ORANGE;
     if (label == "WATCH") return ST77XX_YELLOW;
     if (label == "NORMAL") return ST77XX_GREEN;
     return ST77XX_CYAN;
@@ -551,74 +551,74 @@ void drawAiStatusPage() {
     tft.setTextSize(1);
     tft.setTextColor(0xC618);
     tft.setCursor(22, 52);
-    tft.print("NET:");
-    tft.setCursor(122, 52);
+    tft.print("Network:");
+    tft.setCursor(138, 52);
     tft.print("AI:");
 
-    tft.fillRoundRect(20, 74, 200, 52, 6, ST77XX_WHITE);
-    tft.drawRoundRect(20, 74, 200, 52, 6, ST77XX_CYAN);
+    tft.fillRoundRect(20, 70, 200, 52, 6, ST77XX_WHITE);
+    tft.drawRoundRect(20, 70, 200, 52, 6, ST77XX_CYAN);
     tft.setTextSize(1);
     tft.setTextColor(0x4208);
-    tft.setCursor(32, 84);
-    tft.print("RISK");
+    tft.setCursor(32, 80);
+    tft.print("Risk Level");
 
     tft.setTextSize(1);
     tft.setTextColor(ST77XX_WHITE);
-    tft.setCursor(22, 142);
-    tft.print("AUTO AI: ON");
-    tft.setCursor(32, 158);
-    tft.print("T:");
-    tft.setCursor(120, 158);
-    tft.print("H:");
-    tft.setCursor(32, 174);
-    tft.print("L:");
-    tft.setCursor(120, 174);
-    tft.print("ALM:");
-    tft.setCursor(22, 202);
+    tft.setCursor(22, 132);
+    tft.print("Auto Analyze: ON");
+    tft.setCursor(22, 150);
+    tft.print("Temperature:");
+    tft.setCursor(22, 166);
+    tft.print("Humidity:");
+    tft.setCursor(22, 182);
+    tft.print("Light:");
+    tft.setCursor(22, 198);
+    tft.print("Alarm:");
+    tft.setCursor(22, 214);
     tft.setTextColor(ST77XX_CYAN);
-    tft.print("QR: WEB   BTN: NEXT");
+    tft.print("Button: Next Page");
     updateAiStatusPageValues();
 }
 
 void updateAiStatusPageValues() {
     tft.setTextSize(1);
-    tft.fillRect(58, 52, 58, 10, 0x0841);
-    tft.setCursor(58, 52);
+    tft.fillRect(80, 52, 48, 10, 0x0841);
+    tft.setCursor(80, 52);
     tft.setTextColor(cloudStatus == "OK" ? ST77XX_GREEN : ST77XX_RED);
     tft.print(cloudStatus);
 
-    tft.fillRect(146, 52, 50, 10, 0x0841);
-    tft.setCursor(146, 52);
+    tft.fillRect(158, 52, 50, 10, 0x0841);
+    tft.setCursor(158, 52);
     tft.setTextColor(aiStatus == "OK" ? ST77XX_GREEN : ST77XX_YELLOW);
     tft.print(aiShortStatus());
 
-    tft.drawRoundRect(20, 74, 200, 52, 6, aiRiskColor());
-    tft.fillRect(22, 96, 196, 26, ST77XX_WHITE);
+    tft.drawRoundRect(20, 70, 200, 52, 6, aiRiskColor());
+    tft.fillRect(22, 92, 196, 26, ST77XX_WHITE);
     tft.setTextSize(2);
     tft.setTextColor(aiRiskColor());
-    tft.setCursor(32, 102);
+    tft.setCursor(46, 98);
     tft.print(aiRiskLabel());
 
     tft.setTextSize(1);
-    tft.fillRect(50, 158, 50, 10, 0x0841);
-    tft.setCursor(50, 158);
+    tft.fillRect(100, 150, 70, 10, 0x0841);
+    tft.setCursor(100, 150);
     tft.setTextColor(isTempAlarm() ? ST77XX_RED : ST77XX_GREEN);
-    tft.print(isTempAlarm() ? "HIGH" : "OK");
+    tft.print(isTempAlarm() ? "High" : "Normal");
 
-    tft.fillRect(140, 158, 50, 10, 0x0841);
-    tft.setCursor(140, 158);
+    tft.fillRect(80, 166, 70, 10, 0x0841);
+    tft.setCursor(80, 166);
     tft.setTextColor(isHumiAlarm() ? ST77XX_RED : ST77XX_GREEN);
-    tft.print(isHumiAlarm() ? "HIGH" : "OK");
+    tft.print(isHumiAlarm() ? "High" : "Normal");
 
-    tft.fillRect(50, 174, 50, 10, 0x0841);
-    tft.setCursor(50, 174);
+    tft.fillRect(62, 182, 70, 10, 0x0841);
+    tft.setCursor(62, 182);
     tft.setTextColor(isLightAlarm() ? ST77XX_RED : ST77XX_GREEN);
-    tft.print(isLightAlarm() ? "HIGH" : "OK");
+    tft.print(isLightAlarm() ? "High" : "Normal");
 
-    tft.fillRect(150, 174, 40, 10, 0x0841);
-    tft.setCursor(150, 174);
+    tft.fillRect(68, 198, 48, 10, 0x0841);
+    tft.setCursor(68, 198);
     tft.setTextColor(isAlarming ? ST77XX_RED : ST77XX_GREEN);
-    tft.print(isAlarming ? "ON" : "OFF");
+    tft.print(isAlarming ? "On" : "Off");
 }
 
 void updateDataPageValues() {
