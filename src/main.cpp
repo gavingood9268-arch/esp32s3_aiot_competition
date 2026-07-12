@@ -471,15 +471,34 @@ void drawMetricBox(int x, int y, const char* label, const String& value, uint16_
     tft.drawRoundRect(x, y, 100, 64, 6, border);
     if (alarm) {
         tft.drawRoundRect(x + 2, y + 2, 96, 60, 5, ST77XX_RED);
-        tft.setTextSize(1);
-        tft.setTextColor(ST77XX_RED);
-        tft.setCursor(x + 86, y + 8);
-        tft.print("!");
     }
     tft.setTextSize(1);
     tft.setTextColor(alarm ? ST77XX_RED : 0x4208);
     tft.setCursor(x + 8, y + 8);
     tft.print(label);
+    tft.setTextSize(strcmp(label, "RISK") == 0 ? 1 : 2);
+    tft.setTextColor(border);
+    tft.setCursor(x + 8, strcmp(label, "RISK") == 0 ? y + 34 : y + 30);
+    tft.print(value);
+}
+
+void updateMetricBoxValue(int x, int y, const char* label, const String& value, uint16_t color, bool alarm) {
+    uint16_t border = alarm ? ST77XX_RED : color;
+    tft.drawRoundRect(x, y, 100, 64, 6, border);
+    tft.drawRoundRect(x + 2, y + 2, 96, 60, 5, alarm ? ST77XX_RED : ST77XX_WHITE);
+    tft.fillRect(x + 82, y + 6, 14, 14, ST77XX_WHITE);
+    if (alarm) {
+        tft.setTextSize(1);
+        tft.setTextColor(ST77XX_RED);
+        tft.setCursor(x + 86, y + 8);
+        tft.print("!");
+    }
+    tft.fillRect(x + 8, y + 8, 86, 10, ST77XX_WHITE);
+    tft.setTextSize(1);
+    tft.setTextColor(alarm ? ST77XX_RED : 0x4208);
+    tft.setCursor(x + 8, y + 8);
+    tft.print(label);
+    tft.fillRect(x + 8, y + 28, 84, 24, ST77XX_WHITE);
     tft.setTextSize(strcmp(label, "RISK") == 0 ? 1 : 2);
     tft.setTextColor(border);
     tft.setCursor(x + 8, strcmp(label, "RISK") == 0 ? y + 34 : y + 30);
@@ -501,7 +520,7 @@ void drawRiskBox(int x, int y) {
     tft.setTextSize(1);
     tft.setTextColor(isAlarming ? ST77XX_RED : 0x4208);
     tft.setCursor(x + 8, y + 8);
-    tft.print("RISK");
+    tft.print("Risk Level");
     tft.setTextSize(2);
     tft.setTextColor(border);
     tft.setCursor(x + 8, y + 24);
@@ -512,10 +531,43 @@ void drawRiskBox(int x, int y) {
 }
 
 void drawOverviewValues() {
-    drawMetricBox(15, 44, "TEMP", String(temp, 1) + "C", ST77XX_ORANGE, isTempAlarm());
-    drawMetricBox(125, 44, "HUMI", String(humi, 1) + "%", ST77XX_CYAN, isHumiAlarm());
-    drawMetricBox(15, 116, "LIGHT", String(lightLevel) + "%", ST77XX_YELLOW, isLightAlarm());
+    drawMetricBox(15, 44, "Temperature", String(temp, 1) + "C", ST77XX_ORANGE, isTempAlarm());
+    drawMetricBox(125, 44, "Humidity", String(humi, 1) + "%", ST77XX_CYAN, isHumiAlarm());
+    drawMetricBox(15, 116, "Light", String(lightLevel) + "%", ST77XX_YELLOW, isLightAlarm());
     drawRiskBox(125, 116);
+}
+
+void updateRiskBoxValue(int x, int y) {
+    uint16_t border = isAlarming ? ST77XX_RED : ST77XX_GREEN;
+    tft.drawRoundRect(x, y, 100, 64, 6, border);
+    tft.drawRoundRect(x + 2, y + 2, 96, 60, 5, isAlarming ? ST77XX_RED : ST77XX_WHITE);
+    tft.fillRect(x + 82, y + 6, 14, 14, ST77XX_WHITE);
+    if (isAlarming) {
+        tft.setTextSize(1);
+        tft.setTextColor(ST77XX_RED);
+        tft.setCursor(x + 86, y + 8);
+        tft.print("!");
+    }
+    tft.fillRect(x + 8, y + 8, 86, 10, ST77XX_WHITE);
+    tft.setTextSize(1);
+    tft.setTextColor(isAlarming ? ST77XX_RED : 0x4208);
+    tft.setCursor(x + 8, y + 8);
+    tft.print("Risk Level");
+    tft.fillRect(x + 8, y + 24, 84, 34, ST77XX_WHITE);
+    tft.setTextSize(2);
+    tft.setTextColor(border);
+    tft.setCursor(x + 8, y + 24);
+    tft.print(riskText());
+    tft.setTextSize(1);
+    tft.setCursor(x + 5, y + 48);
+    tft.print(riskDetailText());
+}
+
+void updateOverviewValues() {
+    updateMetricBoxValue(15, 44, "Temperature", String(temp, 1) + "C", ST77XX_ORANGE, isTempAlarm());
+    updateMetricBoxValue(125, 44, "Humidity", String(humi, 1) + "%", ST77XX_CYAN, isHumiAlarm());
+    updateMetricBoxValue(15, 116, "Light", String(lightLevel) + "%", ST77XX_YELLOW, isLightAlarm());
+    updateRiskBoxValue(125, 116);
 }
 
 void drawOverviewPage() {
@@ -524,7 +576,7 @@ void drawOverviewPage() {
     tft.setTextSize(2);
     tft.setTextColor(ST77XX_CYAN);
     tft.setCursor(42, 19);
-    tft.print("AIoT ENV");
+    tft.print("AIoT DATA");
     drawOverviewValues();
     tft.setTextSize(1);
     tft.setTextColor(0xC618);
@@ -622,10 +674,14 @@ void updateAiStatusPageValues() {
 }
 
 void updateDataPageValues() {
-    tft.fillRect(0, 38, 240, 146, 0x0841);
-    drawOverviewValues();
-    tft.fillRect(0, 208, 240, 18, 0x0841);
+    updateOverviewValues();
     tft.setTextSize(1);
+    tft.fillRect(23, 196, 194, 10, 0x0841);
+    tft.setTextColor(0xC618);
+    tft.setCursor(23, 196);
+    tft.print(wifiConnected ? "IP: " : "WiFi: ");
+    tft.print(wifiConnected ? ipAddr : "CONNECTING");
+    tft.fillRect(23, 212, 194, 10, 0x0841);
     tft.setCursor(23, 212);
     tft.setTextColor(isAlarming ? ST77XX_RED : ST77XX_GREEN);
     tft.print(isAlarming ? "ALARM " : "NORMAL ");
