@@ -597,15 +597,15 @@ void drawAiStatusPage() {
     tft.drawRoundRect(8, 8, 224, 224, 8, ST77XX_MAGENTA);
     tft.setTextSize(2);
     tft.setTextColor(ST77XX_MAGENTA);
-    tft.setCursor(72, 18);
-    tft.print("CLOUD AI");
+    tft.setCursor(54, 18);
+    tft.print("CLOUD CHECK");
 
     tft.setTextSize(1);
     tft.setTextColor(0xC618);
     tft.setCursor(22, 52);
-    tft.print("Network:");
-    tft.setCursor(138, 52);
-    tft.print("AI:");
+    tft.print("Cloud:");
+    tft.setCursor(132, 52);
+    tft.print("Result:");
 
     tft.fillRoundRect(20, 70, 200, 52, 6, ST77XX_WHITE);
     tft.drawRoundRect(20, 70, 200, 52, 6, ST77XX_CYAN);
@@ -617,7 +617,7 @@ void drawAiStatusPage() {
     tft.setTextSize(1);
     tft.setTextColor(ST77XX_WHITE);
     tft.setCursor(22, 132);
-    tft.print("Auto Analyze: ON");
+    tft.print("Auto Check: ON");
     tft.setCursor(22, 150);
     tft.print("Temperature:");
     tft.setCursor(22, 166);
@@ -634,13 +634,13 @@ void drawAiStatusPage() {
 
 void updateAiStatusPageValues() {
     tft.setTextSize(1);
-    tft.fillRect(80, 52, 48, 10, 0x0841);
-    tft.setCursor(80, 52);
+    tft.fillRect(68, 52, 52, 10, 0x0841);
+    tft.setCursor(68, 52);
     tft.setTextColor(cloudStatus == "OK" ? ST77XX_GREEN : ST77XX_RED);
     tft.print(cloudStatus);
 
-    tft.fillRect(158, 52, 50, 10, 0x0841);
-    tft.setCursor(158, 52);
+    tft.fillRect(178, 52, 42, 10, 0x0841);
+    tft.setCursor(178, 52);
     tft.setTextColor(aiStatus == "OK" ? ST77XX_GREEN : ST77XX_YELLOW);
     tft.print(aiShortStatus());
 

@@ -57,9 +57,9 @@ ai_result: dict[str, Any] = {
     "risk": "未分析",
     "summary": "尚未触发 AI 分析。",
     "sensor_analysis": "等待设备上传温度、湿度、光照数据。",
-    "compound_risk": "等待云端生成组合风险判断。",
-    "advice": "请先等待 ESP32 上传数据，然后点击“AI 风险分析”。",
-    "demo_note": "网页端会展示完整分析，设备端小屏只显示结论。",
+    "compound_risk": "等待生成综合判断。",
+    "advice": "请先等待 ESP32 上传数据，然后点击“风险分析”。",
+    "demo_note": "网页端显示完整结果，设备端小屏同步核心结论。",
     "diagnostic": "",
     "updated_at": 0,
 }
@@ -99,19 +99,19 @@ def compute_local_risk(payload: dict[str, Any]) -> tuple[str, str]:
 
 def build_ai_prompt() -> str:
     return (
-        "你是一个用于竞赛展示的 AIoT 环境风险评估助手。"
+        "你是一个 AIoT 环境风险评估助手。"
         "设备是 ESP32-S3 环境风险终端，传感器包括温度、湿度、光照。"
         "请根据当前数据、阈值、本地报警状态和云端控制状态做风险判断。"
         "分析必须覆盖正常、关注、预警、危险四类可能性，并说明为什么当前属于其中一类。"
         "需要同时考虑单项异常和组合异常，例如高温高湿、强光高温、手动报警测试。"
-        "要求：用中文，适合竞赛网页展示；不要输出 Markdown；每行控制在 60 字以内。"
+        "要求：用中文，适合现场监控看板；不要输出 Markdown；每行控制在 60 字以内。"
         "请严格按六行输出：\n"
         "风险等级：正常/关注/预警/危险\n"
         "综合判断：说明当前总体环境是否安全\n"
         "指标分析：分别说明温度、湿度、光照相对阈值的状态\n"
         "组合风险：说明多因素叠加后是否会放大风险\n"
         "控制建议：给出可执行的处理动作\n"
-        "展示说明：说明本次分析体现的上行采集或下行控制能力\n\n"
+        "系统状态：说明本次数据更新和控制同步是否正常\n\n"
         f"当前设备数据：{state}\n"
         f"当前阈值与云端控制：{control}\n"
     )
@@ -125,27 +125,27 @@ def local_ai_fallback(status: str = "STUB", error: str = "") -> dict[str, Any]:
     advice = "维持当前阈值，继续观察环境变化。"
     sensor_analysis = "温度、湿度、光照均未超过当前云端阈值。"
     compound_risk = "当前没有明显多因素叠加风险。"
-    demo_note = "ESP32 已完成数据上行，云端完成规则兜底分析并回传结果。"
+    demo_note = "ESP32 数据已更新，系统完成状态判断。"
 
     if manual:
         level = 3
         risk_label = "预警"
-        detail = "手动报警测试已开启，云端正在验证下行控制链路。"
+        detail = "手动报警测试已开启，设备进入预警状态。"
         sensor_analysis = "传感器数据可正常上行，当前风险主要来自手动报警控制。"
-        compound_risk = "手动报警会强制设备进入演示预警状态，不代表真实环境超限。"
-        advice = "比赛演示时可关闭手动报警，再制造真实环境异常进行对比。"
-        demo_note = "本次结果体现云端下发控制后，设备端蜂鸣器和 LED 可响应。"
+        compound_risk = "手动报警会强制设备进入预警状态，不代表真实环境超限。"
+        advice = "如需恢复自动监测，请关闭手动报警，并观察真实环境数据变化。"
+        demo_note = "控制指令已同步，蜂鸣器和 LED 可正常响应。"
     elif risk != "NORMAL":
         level = 3
         risk_label = "预警"
         sensor_analysis = detail
         compound_risk = "至少一项环境指标超过阈值，若与其他指标叠加需提高处置优先级。"
         advice = "建议检查对应环境因素，并根据现场情况采取通风、遮光或降温处理。"
-        demo_note = "ESP32 上传异常数据后，云端完成风险判断并将预警结果回传设备端。"
+        demo_note = "设备异常数据已更新，预警结果已同步到页面和小屏。"
 
     if error:
-        advice = f"{advice} 当前云端规则兜底已生效，设备端仍可继续报警与下行控制演示。"
-        demo_note = "百炼实时分析未在本轮限定时间内完成，系统已自动切换为规则兜底结果。"
+        advice = f"{advice} 当前基础判断结果已生效，设备端仍可继续报警与下行控制。"
+        demo_note = "实时分析本轮响应较慢，页面先显示基础判断结果。"
 
     return {
         "status": status,
@@ -212,7 +212,7 @@ def parse_ai_text(content: str) -> dict[str, Any]:
     sensor_analysis = fields.get("指标分析") or "AI 未返回单项指标分析。"
     compound_risk = fields.get("组合风险") or "AI 未返回组合风险判断。"
     advice = fields.get("控制建议") or fields.get("建议") or "请根据现场情况检查设备与阈值设置。"
-    demo_note = fields.get("展示说明") or "设备数据已上传到云端，AI 分析结果已返回网页和设备端。"
+    demo_note = fields.get("系统状态") or fields.get("链路说明") or "设备数据已更新，分析结果已同步到网页和设备端。"
     level_map = {"正常": 1, "关注": 2, "预警": 3, "危险": 4}
     return {
         "status": "OK",
@@ -235,9 +235,9 @@ def run_ai_analysis() -> dict[str, Any]:
                 "level": 0,
                 "summary": "暂无设备数据。",
                 "sensor_analysis": "还没有收到温度、湿度、光照数据。",
-                "compound_risk": "暂无数据，无法判断组合风险。",
+                "compound_risk": "暂无数据，无法判断综合风险。",
                 "advice": "请先给 ESP32 上电并等待第一组传感器数据上传。",
-                "demo_note": "设备上行链路建立后，网页端会自动更新分析结果。",
+                "demo_note": "设备上传第一组数据后，网页端会自动更新结果。",
                 "updated_at": int(time.time()),
             }
         )
@@ -277,10 +277,10 @@ def run_ai_analysis() -> dict[str, Any]:
         data = response.json()
         content = extract_chat_text(data)
         if not content:
-            raise ValueError("百炼返回中没有可解析的 choices[0].message.content")
+            raise ValueError("模型返回内容为空")
         ai_result.update(parse_ai_text(content))
     except requests.Timeout as exc:
-        ai_result.update(local_ai_fallback("STUB", f"百炼响应超时：{exc}"))
+        ai_result.update(local_ai_fallback("STUB", f"模型响应超时：{exc}"))
     except requests.HTTPError as exc:
         detail = str(exc)
         if exc.response is not None and exc.response.text:
@@ -309,7 +309,7 @@ def start_auto_ai_if_needed() -> None:
         ai_result.update(
             {
                 "status": "RUNNING",
-                "summary": "云端 AI 正在根据最新数据分析风险。",
+                "summary": "系统正在根据最新数据分析风险。",
                 "advice": "请稍候，分析完成后会自动刷新。",
                 "updated_at": int(time.time()),
             }
@@ -332,7 +332,7 @@ def html_page() -> str:
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ESP32 AIoT 环境风险终端</title>
+  <title>ESP32-S3 环境监测系统</title>
   <style>
     :root {
       color-scheme: light;
@@ -433,8 +433,8 @@ def html_page() -> str:
   <main>
     <header>
       <div>
-        <h1>ESP32 AIoT 环境风险终端</h1>
-        <div class="sub">公网网页控制台 · 数据来自 ESP32-S3</div>
+        <h1>ESP32-S3 环境监测系统</h1>
+        <div class="sub">网页监测端 · 数据来自现场采集设备</div>
       </div>
       <div id="online" class="pill">加载中</div>
     </header>
@@ -450,18 +450,18 @@ def html_page() -> str:
         <div id="riskDetail">--</div>
       </div>
       <div class="card span-2">
-        <div class="metric-label">AI 风险说明</div>
+        <div class="metric-label">风险分析</div>
         <div id="aiSummary">--</div>
-        <div class="metric-label" style="margin-top:10px">AI 指标分析</div>
+        <div class="metric-label" style="margin-top:10px">指标分析</div>
         <div class="sub" id="aiSensorAnalysis"></div>
-        <div class="metric-label" style="margin-top:10px">AI 组合风险</div>
+        <div class="metric-label" style="margin-top:10px">综合判断</div>
         <div class="sub" id="aiCompoundRisk"></div>
       </div>
 
       <div class="card span-4">
-        <div class="metric-label">AI 控制建议</div>
+        <div class="metric-label">处理建议</div>
         <div id="aiAdvice">--</div>
-        <div class="metric-label" style="margin-top:10px">竞赛展示说明</div>
+        <div class="metric-label" style="margin-top:10px">系统状态</div>
         <div class="sub" id="aiDemoNote"></div>
       </div>
 
@@ -473,18 +473,13 @@ def html_page() -> str:
           <div><label>光照 RAW 阈值</label><input id="lightTh" type="number" step="1"></div>
           <div>
             <label>手动报警测试</label>
-            <div style="padding-top:8px"><input id="manualAlarm" type="checkbox"><span class="sub">强制触发报警，用于测试蜂鸣器/LED/云端下发</span></div>
+            <div style="padding-top:8px"><input id="manualAlarm" type="checkbox"><span class="sub">手动触发报警，用于检查蜂鸣器和 LED</span></div>
           </div>
         </div>
         <div class="btn-row" style="margin-top:12px">
-          <button onclick="saveControl()">保存控制</button>
-          <button onclick="runAi()">AI 风险分析</button>
+          <button onclick="saveControl()">保存设置</button>
+          <button onclick="runAi()">风险分析</button>
         </div>
-      </div>
-
-      <div class="card span-4">
-        <div class="metric-label">原始状态</div>
-        <pre id="raw">--</pre>
       </div>
     </section>
   </main>
@@ -542,7 +537,6 @@ def html_page() -> str:
       setInputValueIfIdle("humiTh", c.humi_threshold);
       setInputValueIfIdle("lightTh", c.light_threshold);
       setCheckboxIfIdle("manualAlarm", c.manual_alarm);
-      document.getElementById("raw").textContent = JSON.stringify(data, null, 2);
     }
 
     async function saveControl() {
