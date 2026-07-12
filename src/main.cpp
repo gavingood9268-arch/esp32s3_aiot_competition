@@ -66,6 +66,7 @@ bool isTempAlarm();
 bool isHumiAlarm();
 bool isLightAlarm();
 int currentAlarmMask();
+void updateAiStatusPageValues();
 
 void setLed(bool on) {
     digitalWrite(LED_PIN, (on == LED_ACTIVE_HIGH) ? HIGH : LOW);
@@ -550,44 +551,72 @@ void drawAiStatusPage() {
     tft.setTextSize(1);
     tft.setTextColor(0xC618);
     tft.setCursor(22, 52);
-    tft.print("CLOUD:");
-    tft.setTextColor(cloudStatus == "OK" ? ST77XX_GREEN : ST77XX_RED);
-    tft.print(cloudStatus);
-    tft.setTextColor(0xC618);
-    tft.print("  AI:");
-    tft.setTextColor(aiStatus == "OK" ? ST77XX_GREEN : ST77XX_YELLOW);
-    tft.print(aiShortStatus());
+    tft.print("YUN:");
+    tft.setCursor(122, 52);
+    tft.print("AI:");
 
     tft.fillRoundRect(20, 74, 200, 52, 6, ST77XX_WHITE);
-    tft.drawRoundRect(20, 74, 200, 52, 6, aiRiskColor());
+    tft.drawRoundRect(20, 74, 200, 52, 6, ST77XX_CYAN);
     tft.setTextSize(1);
     tft.setTextColor(0x4208);
     tft.setCursor(32, 84);
     tft.print("FENGXIAN");
-    tft.setTextSize(2);
-    tft.setTextColor(aiRiskColor());
-    tft.setCursor(32, 102);
-    tft.print(aiRiskLabel());
 
     tft.setTextSize(1);
     tft.setTextColor(ST77XX_WHITE);
     tft.setCursor(22, 142);
     tft.print("ZIDONG FENXI: ON");
     tft.setCursor(22, 158);
-    tft.print("WENDU:");
-    tft.print(isTempAlarm() ? "HIGH" : "OK");
-    tft.print(" SHIDU:");
-    tft.print(isHumiAlarm() ? "HIGH" : "OK");
+    tft.print("WENDU:      SHIDU:");
     tft.setCursor(22, 174);
-    tft.print("GUANG:");
-    tft.print(isLightAlarm() ? "HIGH" : "OK");
-    tft.print(" BAOJING:");
-    tft.print(isAlarming ? "ON" : "OFF");
+    tft.print("GUANG:      BAOJING:");
     tft.setCursor(22, 198);
     tft.setTextColor(ST77XX_CYAN);
     tft.print("Jianyi kan shouji web");
     tft.setCursor(22, 214);
     tft.print("Anjian: ENV > AI > QR");
+    updateAiStatusPageValues();
+}
+
+void updateAiStatusPageValues() {
+    tft.setTextSize(1);
+    tft.fillRect(58, 52, 58, 10, 0x0841);
+    tft.setCursor(58, 52);
+    tft.setTextColor(cloudStatus == "OK" ? ST77XX_GREEN : ST77XX_RED);
+    tft.print(cloudStatus);
+
+    tft.fillRect(146, 52, 50, 10, 0x0841);
+    tft.setCursor(146, 52);
+    tft.setTextColor(aiStatus == "OK" ? ST77XX_GREEN : ST77XX_YELLOW);
+    tft.print(aiShortStatus());
+
+    tft.drawRoundRect(20, 74, 200, 52, 6, aiRiskColor());
+    tft.fillRect(22, 96, 196, 26, ST77XX_WHITE);
+    tft.setTextSize(2);
+    tft.setTextColor(aiRiskColor());
+    tft.setCursor(32, 102);
+    tft.print(aiRiskLabel());
+
+    tft.setTextSize(1);
+    tft.fillRect(60, 158, 42, 10, 0x0841);
+    tft.setCursor(60, 158);
+    tft.setTextColor(isTempAlarm() ? ST77XX_RED : ST77XX_GREEN);
+    tft.print(isTempAlarm() ? "HIGH" : "OK");
+
+    tft.fillRect(150, 158, 42, 10, 0x0841);
+    tft.setCursor(150, 158);
+    tft.setTextColor(isHumiAlarm() ? ST77XX_RED : ST77XX_GREEN);
+    tft.print(isHumiAlarm() ? "HIGH" : "OK");
+
+    tft.fillRect(60, 174, 42, 10, 0x0841);
+    tft.setCursor(60, 174);
+    tft.setTextColor(isLightAlarm() ? ST77XX_RED : ST77XX_GREEN);
+    tft.print(isLightAlarm() ? "HIGH" : "OK");
+
+    tft.fillRect(160, 174, 32, 10, 0x0841);
+    tft.setCursor(160, 174);
+    tft.setTextColor(isAlarming ? ST77XX_RED : ST77XX_GREEN);
+    tft.print(isAlarming ? "ON" : "OFF");
 }
 
 void updateDataPageValues() {
@@ -736,7 +765,7 @@ void loop() {
         if (currentPage == 0) {
             updateDataPageValues();
         } else if (currentPage == 1) {
-            drawAiStatusPage();
+            updateAiStatusPageValues();
         }
     }
 
@@ -744,7 +773,7 @@ void loop() {
         lastCloudSync = now;
         syncCloud();
         if (currentPage == 1) {
-            drawAiStatusPage();
+            updateAiStatusPageValues();
         } else if (currentPage == 0) {
             updateDataPageValues();
         }
